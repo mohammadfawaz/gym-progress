@@ -1,7 +1,7 @@
 use gloo_net::http::Request;
 use gloo_storage::{LocalStorage, Storage};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{HtmlInputElement, HtmlSelectElement};
 use yew::prelude::*;
@@ -9,6 +9,8 @@ use yew::prelude::*;
 const URL: &str = "https://zhlsfzjhlnxztjklhmpi.supabase.co";
 const KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpobHNmempobG54enRqa2xobXBpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0MTE1NjAsImV4cCI6MjEwMDk4NzU2MH0.5E-algHiQRS8dD18r0blom86gU88nFShahk6cAMnpqI";
 const LOCAL: &str = "lift-log-v1";
+const AUTH_TOKEN_KEY: &str = "lift-log-auth-token";
+const AUTH_UID_KEY: &str = "lift-log-auth-uid";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Exercise {
@@ -51,6 +53,12 @@ struct DbWorkout {
     workout_date: String,
     note: String,
     exercises: Vec<Exercise>,
+}
+#[derive(Deserialize)]
+struct DbExerciseCatalog {
+    canonical_name: String,
+    #[serde(default)]
+    aliases: Vec<String>,
 }
 
 fn headers(
@@ -122,6 +130,22 @@ async fn get_workouts(token: &str, uid: &str) -> Result<Vec<Workout>, String> {
         })
         .collect())
 }
+async fn get_exercise_catalog(token: &str) -> Result<Vec<DbExerciseCatalog>, String> {
+    let url = format!(
+        "{URL}/rest/v1/exercise_catalog?select=canonical_name,aliases&order=sort_order.asc,canonical_name.asc"
+    );
+    let res = headers(Request::get(&url), Some(token))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.ok() {
+        return Err(res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Could not load exercise catalog".into()));
+    }
+    res.json().await.map_err(|e| e.to_string())
+}
 async fn put_workout(token: &str, uid: &str, w: &Workout) -> Result<(), String> {
     let req = headers(
         Request::post(&format!("{URL}/rest/v1/workouts?on_conflict=user_id,id")),
@@ -145,6 +169,35 @@ async fn put_workout(token: &str, uid: &str, w: &Workout) -> Result<(), String> 
             .unwrap_or_else(|_| "Could not save workout".into()))
     }
 }
+async fn put_exercise_catalog(token: &str, name: &str) -> Result<(), String> {
+    let req = headers(
+        Request::post(&format!(
+            "{URL}/rest/v1/exercise_catalog?on_conflict=canonical_name"
+        )),
+        Some(token),
+    )
+    .header("Content-Type", "application/json")
+    .header("Prefer", "resolution=merge-duplicates");
+    let body = serde_json::json!({
+        "canonical_name": name,
+        "aliases": [],
+        "sort_order": 9999
+    });
+    let res = req
+        .body(body.to_string())
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if res.ok() {
+        Ok(())
+    } else {
+        Err(res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Could not add exercise".into()))
+    }
+}
 async fn delete_workout(token: &str, uid: &str, id: &str) -> Result<(), String> {
     let url = format!("{URL}/rest/v1/workouts?id=eq.{id}&user_id=eq.{uid}");
     let res = headers(Request::delete(&url), Some(token))
@@ -164,6 +217,16 @@ fn today_string() -> String {
     let iso: String = js_sys::Date::new_0().to_iso_string().into();
     iso[..10].to_string()
 }
+fn stored_auth() -> (Option<String>, Option<String>) {
+    (
+        LocalStorage::get(AUTH_TOKEN_KEY).ok(),
+        LocalStorage::get(AUTH_UID_KEY).ok(),
+    )
+}
+fn clear_auth() {
+    let _ = LocalStorage::delete(AUTH_TOKEN_KEY);
+    let _ = LocalStorage::delete(AUTH_UID_KEY);
+}
 fn input_value(e: InputEvent) -> String {
     e.target_unchecked_into::<HtmlInputElement>().value()
 }
@@ -173,6 +236,84 @@ fn previous(workouts: &[Workout], name: &str) -> Option<Exercise> {
         .flat_map(|w| w.exercises.iter())
         .find(|e| e.name.eq_ignore_ascii_case(name))
         .cloned()
+}
+fn canonicalize_name(name: &str, aliases: &HashMap<String, String>) -> String {
+    aliases
+        .get(&name.trim().to_ascii_lowercase())
+        .cloned()
+        .unwrap_or_else(|| name.trim().to_string())
+}
+fn title_case_name(name: &str) -> String {
+    name.split_whitespace()
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => {
+                    first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+                }
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+fn build_catalog(rows: &[DbExerciseCatalog]) -> (Vec<String>, HashMap<String, String>) {
+    let mut options = Vec::new();
+    let mut aliases = HashMap::new();
+    for row in rows {
+        options.push(row.canonical_name.clone());
+        aliases.insert(
+            row.canonical_name.to_ascii_lowercase(),
+            row.canonical_name.clone(),
+        );
+        for alias in &row.aliases {
+            aliases.insert(alias.to_ascii_lowercase(), row.canonical_name.clone());
+        }
+    }
+    (options, aliases)
+}
+async fn sync_user_data(
+    access_token: &str,
+    user_id: &str,
+) -> Result<(Vec<Workout>, Vec<String>, HashMap<String, String>), String> {
+    let catalog_rows = get_exercise_catalog(access_token).await.unwrap_or_default();
+    let (catalog_names, alias_map) = build_catalog(&catalog_rows);
+    let remote = canonicalize_workouts(
+        get_workouts(access_token, user_id)
+            .await
+            .unwrap_or_default(),
+        &alias_map,
+    );
+    let local = canonicalize_workouts(
+        LocalStorage::get::<Vec<Workout>>(LOCAL).unwrap_or_default(),
+        &alias_map,
+    );
+    let merged = merge_workouts(remote, local);
+    for w in &merged {
+        let _ = put_workout(access_token, user_id, w).await;
+    }
+    Ok((merged, catalog_names, alias_map))
+}
+fn canonicalize_workout(w: &Workout, aliases: &HashMap<String, String>) -> Workout {
+    let mut next = w.clone();
+    next.exercises = next
+        .exercises
+        .into_iter()
+        .map(|mut e| {
+            e.name = canonicalize_name(&e.name, aliases);
+            e
+        })
+        .collect();
+    next
+}
+fn canonicalize_workouts(
+    workouts: Vec<Workout>,
+    aliases: &HashMap<String, String>,
+) -> Vec<Workout> {
+    workouts
+        .into_iter()
+        .map(|w| canonicalize_workout(&w, aliases))
+        .collect()
 }
 fn exercise_names(workouts: &[Workout]) -> Vec<String> {
     let mut names = BTreeSet::new();
@@ -263,7 +404,6 @@ fn auth_view(
             <div class="hero-card">
                 <p class="eyebrow">{"PERSONAL TRAINING LOG"}</p>
                 <h1>{"Lift Log"}</h1>
-                <h2>{"Train with your history."}</h2>
                 <p>{"Sign in to sync across devices."}</p>
             </div>
             <form class="auth-card" onsubmit={submit_auth}>
@@ -343,14 +483,18 @@ struct WorkoutEditorProps {
     workouts: UseStateHandle<Vec<Workout>>,
     editing_id: UseStateHandle<Option<String>>,
     status: UseStateHandle<String>,
-    on_name: Callback<InputEvent>,
+    new_exercise_name: UseStateHandle<String>,
+    on_name: Callback<Event>,
     on_pick: Callback<Event>,
+    add_new_exercise: Callback<MouseEvent>,
     add: Callback<MouseEvent>,
     remove_draft: Callback<usize>,
     save: Callback<MouseEvent>,
+    logout: Callback<MouseEvent>,
     load_workout: Callback<Workout>,
     delete_selected: Callback<String>,
     exercise_options: Vec<String>,
+    history_options: Vec<String>,
 }
 
 fn workout_editor_view(props: WorkoutEditorProps) -> Html {
@@ -367,14 +511,18 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         workouts,
         editing_id,
         status,
+        new_exercise_name,
         on_name,
         on_pick,
+        add_new_exercise,
         add,
         remove_draft,
         save,
+        logout,
         load_workout,
         delete_selected,
         exercise_options,
+        history_options,
     } = props;
 
     html! {
@@ -384,11 +532,10 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                     <p class="eyebrow">{"PERSONAL TRAINING LOG"}</p>
                     <h1>{"Lift Log"}</h1>
                 </div>
-                <span class="pill">{"SYNCED"}</span>
+                <button class="text-button" type="button" onclick={logout}>{"Logout"}</button>
             </header>
             <section class="hero-card">
                 <p class="eyebrow">{"NEW WORKOUT"}</p>
-                <h2>{"Keep the streak moving."}</h2>
                 <p>{"Your previous numbers prefill as targets."}</p>
             </section>
             <section class="workout-form">
@@ -417,13 +564,16 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                     {"Pick from history"}
                     <select value={(*exercise_pick).clone()} onchange={on_pick}>
                         <option value="">{"Choose a previous exercise"}</option>
-                        {for exercise_options.iter().map(|name| html!{ <option value={name.clone()}>{name.clone()}</option> })}
+                        {for history_options.iter().map(|name| html!{ <option value={name.clone()}>{name.clone()}</option> })}
                     </select>
                 </label>
                 <div class="exercise-entry">
                     <label class="field-label">
                         {"Exercise"}
-                        <input value={(*name).clone()} oninput={on_name} placeholder="Bench press" />
+                        <select value={(*name).clone()} onchange={on_name}>
+                            <option value="">{"Choose an exercise"}</option>
+                            {for exercise_options.iter().map(|exercise| html!{ <option value={exercise.clone()}>{exercise.clone()}</option> })}
+                        </select>
                     </label>
                     <div class="numbers-row">
                         <label class="field-label">
@@ -446,7 +596,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                                 }}
                             >
                                 <option value="lb">{"lb"}</option>
-                                <option value="kg">{"kg"}</option>
                                 <option value="bodyweight">{"bodyweight"}</option>
                             </select>
                         </label>
@@ -474,6 +623,22 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                     </label>
                     <button class="add-button" type="button" onclick={add}>{"+ Add exercise"}</button>
                 </div>
+                <div class="exercise-entry">
+                    <label class="field-label">
+                        {"Add new exercise to database"}
+                        <input
+                            value={(*new_exercise_name).clone()}
+                            oninput={{
+                                let new_exercise_name = new_exercise_name.clone();
+                                Callback::from(move |e: InputEvent| new_exercise_name.set(input_value(e)))
+                            }}
+                            placeholder="Romanian deadlift"
+                        />
+                    </label>
+                    <button class="text-button" type="button" onclick={add_new_exercise}>
+                        {"Add to database"}
+                    </button>
+                </div>
                 {draft_entries(&draft, remove_draft)}
                 <button class="primary-button save-button" type="button" onclick={save}>
                     {if editing_id.is_some() { "Update workout" } else { "Save workout" }}
@@ -494,9 +659,12 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
 
 #[function_component(App)]
 fn app() -> Html {
-    let token = use_state(|| None::<String>);
-    let uid = use_state(|| None::<String>);
+    let (stored_token, stored_uid) = stored_auth();
+    let token = use_state(|| stored_token);
+    let uid = use_state(|| stored_uid);
     let workouts = use_state(Vec::<Workout>::new);
+    let exercise_catalog = use_state(Vec::<String>::new);
+    let exercise_aliases = use_state(HashMap::<String, String>::new);
     let status = use_state(String::new);
     let email = use_state(String::new);
     let password = use_state(String::new);
@@ -505,12 +673,49 @@ fn app() -> Html {
     let note = use_state(String::new);
     let exercise_pick = use_state(String::new);
     let name = use_state(String::new);
+    let new_exercise_name = use_state(String::new);
     let weight = use_state(String::new);
     let unit = use_state(|| "lb".to_string());
     let reps = use_state(String::new);
     let details = use_state(String::new);
     let draft = use_state(Vec::<Exercise>::new);
     let editing_id = use_state(|| None::<String>);
+
+    {
+        let token = token.clone();
+        let uid = uid.clone();
+        let workouts = workouts.clone();
+        let exercise_catalog = exercise_catalog.clone();
+        let exercise_aliases = exercise_aliases.clone();
+        let status = status.clone();
+        use_effect_with((), move |_| {
+            if let (Some(access_token), Some(user_id)) = ((*token).clone(), (*uid).clone()) {
+                let token = token.clone();
+                let uid = uid.clone();
+                let workouts = workouts.clone();
+                let exercise_catalog = exercise_catalog.clone();
+                let exercise_aliases = exercise_aliases.clone();
+                let status = status.clone();
+                spawn_local(async move {
+                    match sync_user_data(&access_token, &user_id).await {
+                        Ok((merged, catalog_names, alias_map)) => {
+                            workouts.set(merged);
+                            exercise_catalog.set(catalog_names);
+                            exercise_aliases.set(alias_map);
+                            status.set(String::new());
+                        }
+                        Err(e) => {
+                            clear_auth();
+                            token.set(None);
+                            uid.set(None);
+                            status.set(e);
+                        }
+                    }
+                });
+            }
+            || ()
+        });
+    }
 
     let load_workout = {
         let date = date.clone();
@@ -523,12 +728,14 @@ fn app() -> Html {
         let reps = reps.clone();
         let details = details.clone();
         let exercise_pick = exercise_pick.clone();
+        let new_exercise_name = new_exercise_name.clone();
         Callback::from(move |w: Workout| {
             date.set(w.date.clone());
             note.set(w.note.clone());
             draft.set(w.exercises.clone());
             editing_id.set(Some(w.id));
             name.set(String::new());
+            new_exercise_name.set(String::new());
             weight.set(String::new());
             unit.set("lb".into());
             reps.set(String::new());
@@ -543,6 +750,8 @@ fn app() -> Html {
         let token = token.clone();
         let uid = uid.clone();
         let workouts = workouts.clone();
+        let exercise_catalog = exercise_catalog.clone();
+        let exercise_aliases = exercise_aliases.clone();
         let status = status.clone();
         Callback::from(move |e: SubmitEvent| {
             e.prevent_default();
@@ -552,6 +761,8 @@ fn app() -> Html {
             let token = token.clone();
             let uid = uid.clone();
             let workouts = workouts.clone();
+            let exercise_catalog = exercise_catalog.clone();
+            let exercise_aliases = exercise_aliases.clone();
             let status = status.clone();
             spawn_local(async move {
                 status.set("Connecting…".into());
@@ -575,23 +786,25 @@ fn app() -> Html {
                             status.set("Signed in, but Supabase did not return a user id.".into());
                             return;
                         };
-                        let remote = get_workouts(&access_token, &user_id)
-                            .await
-                            .unwrap_or_default();
-                        let local = LocalStorage::get::<Vec<Workout>>(LOCAL).unwrap_or_default();
-                        if !local.is_empty() {
-                            let merged = merge_workouts(remote, local);
-                            for w in &merged {
-                                let _ = put_workout(&access_token, &user_id, w).await;
+                        let _ = LocalStorage::set(AUTH_TOKEN_KEY, access_token.clone());
+                        let _ = LocalStorage::set(AUTH_UID_KEY, user_id.clone());
+                        token.set(Some(access_token.clone()));
+                        uid.set(Some(user_id.clone()));
+                        let workouts = workouts.clone();
+                        let exercise_catalog = exercise_catalog.clone();
+                        let exercise_aliases = exercise_aliases.clone();
+                        let status = status.clone();
+                        spawn_local(async move {
+                            match sync_user_data(&access_token, &user_id).await {
+                                Ok((merged, catalog_names, alias_map)) => {
+                                    workouts.set(merged);
+                                    exercise_catalog.set(catalog_names);
+                                    exercise_aliases.set(alias_map);
+                                    status.set(String::new());
+                                }
+                                Err(e) => status.set(e),
                             }
-                            workouts.set(merged);
-                            status.set("Synced with Supabase.".into());
-                        } else {
-                            workouts.set(remote);
-                            status.set("Synced with Supabase.".into());
-                        }
-                        token.set(Some(access_token));
-                        uid.set(Some(user_id));
+                        });
                     }
                     Err(e) => status.set(e),
                 }
@@ -606,14 +819,21 @@ fn app() -> Html {
         let details = details.clone();
         let draft = draft.clone();
         let status = status.clone();
+        let exercise_catalog = exercise_catalog.clone();
+        let exercise_aliases = exercise_aliases.clone();
         Callback::from(move |_| {
             if name.trim().is_empty() || reps.trim().is_empty() {
-                status.set("Add an exercise name and reps first.".into());
+                status.set("Choose an exercise and enter reps first.".into());
+                return;
+            }
+            let canonical_name = canonicalize_name(&name, &exercise_aliases);
+            if !exercise_catalog.iter().any(|item| item == &canonical_name) {
+                status.set("Choose an exercise from the database list.".into());
                 return;
             }
             let mut next = (*draft).clone();
             next.push(Exercise {
-                name: (*name).trim().into(),
+                name: canonical_name,
                 weight: weight.parse().ok(),
                 unit: (*unit).clone(),
                 reps: (*reps).trim().into(),
@@ -625,6 +845,93 @@ fn app() -> Html {
             unit.set("lb".into());
             reps.set(String::new());
             details.set(String::new());
+        })
+    };
+    let logout = {
+        let token = token.clone();
+        let uid = uid.clone();
+        let workouts = workouts.clone();
+        let exercise_catalog = exercise_catalog.clone();
+        let exercise_aliases = exercise_aliases.clone();
+        let status = status.clone();
+        let draft = draft.clone();
+        let editing_id = editing_id.clone();
+        let exercise_pick = exercise_pick.clone();
+        let name = name.clone();
+        let new_exercise_name = new_exercise_name.clone();
+        let weight = weight.clone();
+        let unit = unit.clone();
+        let reps = reps.clone();
+        let details = details.clone();
+        Callback::from(move |_| {
+            clear_auth();
+            token.set(None);
+            uid.set(None);
+            workouts.set(Vec::new());
+            exercise_catalog.set(Vec::new());
+            exercise_aliases.set(HashMap::new());
+            status.set(String::new());
+            draft.set(Vec::new());
+            editing_id.set(None);
+            exercise_pick.set(String::new());
+            name.set(String::new());
+            new_exercise_name.set(String::new());
+            weight.set(String::new());
+            unit.set("lb".into());
+            reps.set(String::new());
+            details.set(String::new());
+        })
+    };
+    let add_new_exercise = {
+        let token = token.clone();
+        let status = status.clone();
+        let new_exercise_name = new_exercise_name.clone();
+        let exercise_catalog = exercise_catalog.clone();
+        let exercise_aliases = exercise_aliases.clone();
+        let name = name.clone();
+        Callback::from(move |_| {
+            let canonical = title_case_name(new_exercise_name.trim());
+            if canonical.is_empty() {
+                status.set("Enter a new exercise name first.".into());
+                return;
+            }
+            if exercise_catalog
+                .iter()
+                .any(|item| item.eq_ignore_ascii_case(&canonical))
+            {
+                name.set(canonical.clone());
+                new_exercise_name.set(String::new());
+                status.set("That exercise already exists.".into());
+                return;
+            }
+            let token = (*token).clone();
+            let status = status.clone();
+            let exercise_catalog = exercise_catalog.clone();
+            let exercise_aliases = exercise_aliases.clone();
+            let new_exercise_name = new_exercise_name.clone();
+            let name = name.clone();
+            spawn_local(async move {
+                if let Some(t) = token {
+                    match put_exercise_catalog(&t, &canonical).await {
+                        Ok(()) => {
+                            let mut next = (*exercise_catalog).clone();
+                            next.push(canonical.clone());
+                            next.sort();
+                            next.dedup();
+                            exercise_catalog.set(next);
+                            let mut aliases = (*exercise_aliases).clone();
+                            aliases.insert(canonical.to_ascii_lowercase(), canonical.clone());
+                            exercise_aliases.set(aliases);
+                            name.set(canonical.clone());
+                            new_exercise_name.set(String::new());
+                            status.set("Added exercise to the database.".into());
+                        }
+                        Err(e) => status.set(e),
+                    }
+                } else {
+                    status.set("Sign in first.".into());
+                }
+            });
         })
     };
     let remove_draft = {
@@ -642,6 +949,7 @@ fn app() -> Html {
         let note = note.clone();
         let exercise_pick = exercise_pick.clone();
         let name = name.clone();
+        let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
         let unit = unit.clone();
         let reps = reps.clone();
@@ -653,6 +961,7 @@ fn app() -> Html {
             note.set(String::new());
             exercise_pick.set(String::new());
             name.set(String::new());
+            new_exercise_name.set(String::new());
             weight.set(String::new());
             unit.set("lb".into());
             reps.set(String::new());
@@ -743,16 +1052,23 @@ fn app() -> Html {
         let weight = weight.clone();
         let reps = reps.clone();
         let details = details.clone();
+        let unit = unit.clone();
         let exercise_pick = exercise_pick.clone();
         let workouts = workouts.clone();
-        Callback::from(move |e: InputEvent| {
-            let v = input_value(e);
+        Callback::from(move |e: Event| {
+            let v = e.target_unchecked_into::<HtmlSelectElement>().value();
             exercise_pick.set(String::new());
             name.set(v.clone());
             if let Some(p) = previous(&workouts, &v) {
                 weight.set(p.weight.map(|x| x.to_string()).unwrap_or_default());
                 reps.set(p.reps);
                 details.set(p.details);
+                unit.set(p.unit);
+            } else {
+                weight.set(String::new());
+                reps.set(String::new());
+                details.set(String::new());
+                unit.set("lb".into());
             }
         })
     };
@@ -774,12 +1090,17 @@ fn app() -> Html {
                 weight.set(p.weight.map(|x| x.to_string()).unwrap_or_default());
                 reps.set(p.reps);
                 details.set(p.details);
+                unit.set(p.unit);
+            } else {
+                weight.set(String::new());
+                reps.set(String::new());
+                details.set(String::new());
+                unit.set("lb".into());
             }
-            unit.set("lb".into());
             exercise_pick.set(String::new());
         })
     };
-    let exercise_options = exercise_names(&workouts);
+    let history_options = exercise_names(&workouts);
     workout_editor_view(WorkoutEditorProps {
         date,
         note,
@@ -793,14 +1114,18 @@ fn app() -> Html {
         workouts,
         editing_id,
         status,
+        new_exercise_name,
         on_name,
         on_pick,
+        add_new_exercise,
         add,
         remove_draft,
         save,
+        logout,
         load_workout,
         delete_selected,
-        exercise_options,
+        exercise_options: (*exercise_catalog).clone(),
+        history_options,
     })
 }
 fn main() {

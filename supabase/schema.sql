@@ -18,3 +18,39 @@ drop policy if exists "Users can update their own workouts" on public.workouts;
 create policy "Users can update their own workouts" on public.workouts for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 drop policy if exists "Users can delete their own workouts" on public.workouts;
 create policy "Users can delete their own workouts" on public.workouts for delete using (auth.uid() = user_id);
+
+create table if not exists public.exercise_catalog (
+  canonical_name text primary key,
+  aliases text[] not null default '{}'::text[],
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.exercise_catalog enable row level security;
+
+drop policy if exists "Users can read the exercise catalog" on public.exercise_catalog;
+create policy "Users can read the exercise catalog" on public.exercise_catalog for select using (true);
+drop policy if exists "Users can add exercises" on public.exercise_catalog;
+create policy "Users can add exercises" on public.exercise_catalog for insert with check (auth.role() = 'authenticated');
+drop policy if exists "Users can update exercises" on public.exercise_catalog;
+create policy "Users can update exercises" on public.exercise_catalog for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
+create or replace function public.canonical_exercise_name(input_name text)
+returns text
+language sql
+stable
+as $$
+  select coalesce(
+    (
+      select canonical_name
+      from public.exercise_catalog
+      where lower(canonical_name) = lower(input_name)
+         or lower(input_name) = any (
+           select lower(alias)
+           from unnest(aliases) as alias
+         )
+      limit 1
+    ),
+    input_name
+  );
+$$;
