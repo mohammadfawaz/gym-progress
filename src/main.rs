@@ -362,7 +362,7 @@ fn workout_view(
                 <button class="text-button" type="button" onclick={on_edit}>{"Edit"}</button>
                 <button class="text-button" type="button" onclick={on_delete}>{"Delete"}</button>
             </div>
-            { for w.exercises.iter().map(|e| html! { <p class="exercise-summary">{format!("{} · {}{} · {}", e.name, e.weight.map(|v|v.to_string()).unwrap_or_else(||"Bodyweight".into()), if e.weight.is_some(){format!(" {}",e.unit)}else{String::new()}, e.reps)}</p> }) }
+            { for w.exercises.iter().map(|e| html! { <p class="exercise-summary">{format!("{} · {}{} · {}", e.name, e.weight.map(|v|v.to_string()).unwrap_or_else(||"BW".into()), if e.weight.is_some(){format!(" {}",e.unit)}else{String::new()}, e.reps)}</p> }) }
         </article>
     }
 }
@@ -373,7 +373,7 @@ fn draft_view((i, e, on_remove): (usize, &Exercise, Callback<MouseEvent>)) -> Ht
                 <h3>{format!("{}. {}", i + 1, e.name)}</h3>
                 <button class="remove-exercise" type="button" onclick={on_remove}>{"×"}</button>
             </div>
-            <span class="pill">{format!("{} {}", e.weight.map(|v|v.to_string()).unwrap_or_else(||"Bodyweight".into()), e.unit)}</span>
+            <span class="pill">{format!("{} {}", e.weight.map(|v|v.to_string()).unwrap_or_else(||"BW".into()), e.unit)}</span>
             <p class="exercise-summary">{format!("{} reps{}", e.reps, if e.details.is_empty(){String::new()}else{format!(" · {}", e.details)})}</p>
         </article>
     }
