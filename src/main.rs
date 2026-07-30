@@ -316,15 +316,6 @@ fn canonicalize_workouts(
         .map(|w| canonicalize_workout(&w, aliases))
         .collect()
 }
-fn exercise_names(workouts: &[Workout]) -> Vec<String> {
-    let mut names = BTreeSet::new();
-    for workout in workouts {
-        for exercise in &workout.exercises {
-            names.insert(exercise.name.clone());
-        }
-    }
-    names.into_iter().collect()
-}
 fn workout_key(w: &Workout) -> String {
     serde_json::to_string(&serde_json::json!({
         "date": w.date,
@@ -474,7 +465,6 @@ fn history_view(
 struct WorkoutEditorProps {
     date: UseStateHandle<String>,
     note: UseStateHandle<String>,
-    exercise_pick: UseStateHandle<String>,
     name: UseStateHandle<String>,
     weight: UseStateHandle<String>,
     unit: UseStateHandle<String>,
@@ -486,7 +476,6 @@ struct WorkoutEditorProps {
     status: UseStateHandle<String>,
     new_exercise_name: UseStateHandle<String>,
     on_name: Callback<Event>,
-    on_pick: Callback<Event>,
     add: Callback<MouseEvent>,
     remove_draft: Callback<usize>,
     save: Callback<MouseEvent>,
@@ -494,14 +483,12 @@ struct WorkoutEditorProps {
     load_workout: Callback<Workout>,
     delete_selected: Callback<String>,
     exercise_options: Vec<String>,
-    history_options: Vec<String>,
 }
 
 fn workout_editor_view(props: WorkoutEditorProps) -> Html {
     let WorkoutEditorProps {
         date,
         note,
-        exercise_pick,
         name,
         weight,
         unit,
@@ -513,7 +500,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         status,
         new_exercise_name,
         on_name,
-        on_pick,
         add,
         remove_draft,
         save,
@@ -521,7 +507,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         load_workout,
         delete_selected,
         exercise_options,
-        history_options,
     } = props;
 
     html! {
@@ -559,20 +544,13 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                         }}
                     />
                 </label>
-                <label class="field-label">
-                    {"Pick from history"}
-                    <select value={(*exercise_pick).clone()} onchange={on_pick}>
-                        <option value="">{"Choose a previous exercise"}</option>
-                        {for history_options.iter().map(|name| html!{ <option value={name.clone()}>{name.clone()}</option> })}
-                    </select>
-                </label>
-                <div class="exercise-entry">
+                <div class="exercise-stack">
                     <label class="field-label">
                         {"Exercise"}
                         <select value={(*name).clone()} onchange={on_name}>
                             <option value="">{"Choose an exercise"}</option>
-                            <option value={ADD_EXERCISE_VALUE}>{"Add exercise"}</option>
                             {for exercise_options.iter().map(|exercise| html!{ <option value={exercise.clone()}>{exercise.clone()}</option> })}
+                            <option value={ADD_EXERCISE_VALUE}>{"New Exercise"}</option>
                         </select>
                     </label>
                     {if *name == ADD_EXERCISE_VALUE {
@@ -672,7 +650,6 @@ fn app() -> Html {
     let signup = use_state(|| false);
     let date = use_state(|| "2026-07-30".to_string());
     let note = use_state(String::new);
-    let exercise_pick = use_state(String::new);
     let name = use_state(String::new);
     let new_exercise_name = use_state(String::new);
     let weight = use_state(String::new);
@@ -728,7 +705,6 @@ fn app() -> Html {
         let unit = unit.clone();
         let reps = reps.clone();
         let details = details.clone();
-        let exercise_pick = exercise_pick.clone();
         let new_exercise_name = new_exercise_name.clone();
         Callback::from(move |w: Workout| {
             date.set(w.date.clone());
@@ -741,7 +717,6 @@ fn app() -> Html {
             unit.set("lb".into());
             reps.set(String::new());
             details.set(String::new());
-            exercise_pick.set(String::new());
         })
     };
     let submit_auth = {
@@ -936,7 +911,6 @@ fn app() -> Html {
         let status = status.clone();
         let draft = draft.clone();
         let editing_id = editing_id.clone();
-        let exercise_pick = exercise_pick.clone();
         let name = name.clone();
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
@@ -953,7 +927,6 @@ fn app() -> Html {
             status.set(String::new());
             draft.set(Vec::new());
             editing_id.set(None);
-            exercise_pick.set(String::new());
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
@@ -975,7 +948,6 @@ fn app() -> Html {
     let reset_editor: Callback<()> = {
         let date = date.clone();
         let note = note.clone();
-        let exercise_pick = exercise_pick.clone();
         let name = name.clone();
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
@@ -987,7 +959,6 @@ fn app() -> Html {
         Callback::from(move |_: ()| {
             date.set(today_string());
             note.set(String::new());
-            exercise_pick.set(String::new());
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
@@ -1082,11 +1053,9 @@ fn app() -> Html {
         let reps = reps.clone();
         let details = details.clone();
         let unit = unit.clone();
-        let exercise_pick = exercise_pick.clone();
         let workouts = workouts.clone();
         Callback::from(move |e: Event| {
             let v = e.target_unchecked_into::<HtmlSelectElement>().value();
-            exercise_pick.set(String::new());
             name.set(v.clone());
             if v == ADD_EXERCISE_VALUE {
                 new_exercise_name.set(String::new());
@@ -1107,41 +1076,9 @@ fn app() -> Html {
             }
         })
     };
-    let on_pick = {
-        let exercise_pick = exercise_pick.clone();
-        let name = name.clone();
-        let new_exercise_name = new_exercise_name.clone();
-        let weight = weight.clone();
-        let reps = reps.clone();
-        let details = details.clone();
-        let unit = unit.clone();
-        let workouts = workouts.clone();
-        Callback::from(move |e: Event| {
-            let choice = e.target_unchecked_into::<HtmlSelectElement>().value();
-            if choice.is_empty() {
-                return;
-            }
-            name.set(choice.clone());
-            new_exercise_name.set(String::new());
-            if let Some(p) = previous((*workouts).as_slice(), &choice) {
-                weight.set(p.weight.map(|x| x.to_string()).unwrap_or_default());
-                reps.set(p.reps);
-                details.set(p.details);
-                unit.set(p.unit);
-            } else {
-                weight.set(String::new());
-                reps.set(String::new());
-                details.set(String::new());
-                unit.set("lb".into());
-            }
-            exercise_pick.set(String::new());
-        })
-    };
-    let history_options = exercise_names(&workouts);
     workout_editor_view(WorkoutEditorProps {
         date,
         note,
-        exercise_pick,
         name,
         weight,
         unit,
@@ -1153,7 +1090,6 @@ fn app() -> Html {
         status,
         new_exercise_name,
         on_name,
-        on_pick,
         add,
         remove_draft,
         save,
@@ -1161,7 +1097,6 @@ fn app() -> Html {
         load_workout,
         delete_selected,
         exercise_options: (*exercise_catalog).clone(),
-        history_options,
     })
 }
 fn main() {
