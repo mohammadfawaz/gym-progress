@@ -577,13 +577,16 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                     }}
                     <label class="field-label">
                         {"Weight"}
-                        <input
-                            value={(*weight).clone()}
-                            oninput={{
-                                let weight = weight.clone();
-                                Callback::from(move |e: InputEvent| weight.set(input_value(e)))
-                            }}
-                        />
+                        <span class="weight-row">
+                            <input
+                                value={(*weight).clone()}
+                                oninput={{
+                                    let weight = weight.clone();
+                                    Callback::from(move |e: InputEvent| weight.set(input_value(e)))
+                                }}
+                            />
+                            <span class="weight-unit">{"lbs"}</span>
+                        </span>
                     </label>
                     <label class="field-label">
                         {"Reps per set"}

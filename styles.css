@@ -319,6 +319,20 @@ h2 {
 .field-label select:focus {
   border-color: var(--lime);
 }
+.weight-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.weight-row input {
+  flex: 1;
+}
+.weight-unit {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
 .exercise-entries {
   display: grid;
   gap: 12px;
