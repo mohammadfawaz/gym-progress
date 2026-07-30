@@ -596,7 +596,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                                 }}
                             >
                                 <option value="lb">{"lb"}</option>
-                                <option value="bodyweight">{"bodyweight"}</option>
+                                <option value="bodyweight">{"BW"}</option>
                             </select>
                         </label>
                     </div>
