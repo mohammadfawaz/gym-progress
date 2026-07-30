@@ -160,6 +160,10 @@ async fn delete_workout(token: &str, uid: &str, id: &str) -> Result<(), String> 
             .unwrap_or_else(|_| "Could not delete workout".into()))
     }
 }
+fn today_string() -> String {
+    let iso: String = js_sys::Date::new_0().to_iso_string().into();
+    iso[..10].to_string()
+}
 fn input_value(e: InputEvent) -> String {
     e.target_unchecked_into::<HtmlInputElement>().value()
 }
@@ -198,184 +202,6 @@ fn merge_workouts(mut primary: Vec<Workout>, secondary: Vec<Workout>) -> Vec<Wor
     }
     merged.sort_by(|a, b| b.date.cmp(&a.date));
     merged
-}
-fn exercise(name: &str, weight: Option<f64>, reps: &str) -> Exercise {
-    Exercise {
-        name: name.into(),
-        weight,
-        unit: "lb".into(),
-        reps: reps.into(),
-        details: String::new(),
-    }
-}
-fn workout(id: &str, date: &str, exercises: Vec<Exercise>) -> Workout {
-    Workout {
-        id: id.into(),
-        date: date.into(),
-        note: String::new(),
-        exercises,
-    }
-}
-fn seed_workouts() -> Vec<Workout> {
-    vec![
-        workout(
-            "seed-2026-07-28",
-            "2026-07-28",
-            vec![
-                exercise("Bench press", Some(125.0), "9, 9, 9"),
-                exercise("Barbell squats", Some(155.0), "8, 8, 8"),
-                exercise("Dumbbell overhead press", Some(40.0), "8, 8, 6"),
-                exercise("Stiff-leg deadlift", Some(145.0), "10, 10, 10"),
-                exercise("Seated flies", Some(150.0), "10, 10, 8"),
-                exercise("Triceps overhead cable pull", Some(32.5), "10, 10, 10"),
-                exercise("Dumbbell bicep curls", Some(30.0), "8, 8, 8"),
-                exercise("Leg raises", None, "10, 10"),
-            ],
-        ),
-        workout(
-            "seed-2026-07-20",
-            "2026-07-20",
-            vec![
-                exercise("Barbell overhead press", Some(85.0), "8, 8, 8"),
-                exercise("Split squats", Some(35.0), "8, 8, 8"),
-                exercise("Seated rows", Some(125.0), "6, 6"),
-                exercise("Cable flies", Some(160.0), "8, 8, 8"),
-                exercise("Stiff-leg deadlift", Some(140.0), "10, 10, 10"),
-                exercise("Triceps overhead cable pull", Some(30.0), "8, 8, 8"),
-            ],
-        ),
-        workout(
-            "seed-2026-07-16",
-            "2026-07-16",
-            vec![
-                exercise("Assisted pull-ups", Some(31.25), "8, 8, 8"),
-                exercise("Barbell squats", Some(150.0), "8, 8, 8"),
-                exercise("Bench press", Some(125.0), "9, 8, 5"),
-                exercise("Cable single-arm row", Some(100.0), "10, 10, 10"),
-                exercise("Dumbbell overhead press", Some(40.0), "10, 8, 7"),
-                exercise("Seated flies", Some(150.0), "10, 8"),
-            ],
-        ),
-        workout(
-            "seed-2026-07-10",
-            "2026-07-10",
-            vec![
-                exercise("Dumbbell overhead press", Some(40.0), "8, 8, 8"),
-                exercise("Stiff-leg deadlift", Some(135.0), "10, 10, 10"),
-                exercise("Cable chest flies", Some(180.0), "10, 10, 10"),
-                exercise("Tricep cable pulldown", Some(42.5), "10, 10, 10"),
-                exercise("Walking lunges", Some(60.0), "10, 10, 10"),
-                exercise("Lat pulldown", Some(120.0), "10, 10, 10"),
-            ],
-        ),
-        workout(
-            "seed-2026-07-06",
-            "2026-07-06",
-            vec![
-                exercise("Assisted pull-ups", Some(37.5), "10, 10, 7"),
-                exercise("Bench press", Some(125.0), "9, 7, 6"),
-                exercise("Leg press", Some(190.0), "10, 10, 10"),
-                exercise("Barbell overhead press", Some(80.0), "8, 7"),
-                exercise("Stiff-leg deadlift", Some(135.0), "8, 8, 8"),
-                exercise("Seated flies", Some(145.0), "8, 8, 8"),
-            ],
-        ),
-        workout(
-            "seed-2026-07-02",
-            "2026-07-02",
-            vec![
-                exercise("Assisted pull-ups", Some(37.5), "8, 8, 8"),
-                exercise("Cable chest press", Some(160.0), "10, 10, 10"),
-                exercise("Split squats", Some(30.0), "8, 8, 8"),
-                exercise("Seated rows", Some(125.0), "10, 10, 7"),
-                exercise("Dumbbell overhead press", Some(35.0), "10, 7, 6"),
-                exercise("Stiff-leg deadlift", Some(125.0), "8, 8, 8"),
-            ],
-        ),
-        workout(
-            "seed-2026-06-27",
-            "2026-06-27",
-            vec![
-                exercise("Bench press", Some(125.0), "8, 8, 8"),
-                exercise("Barbell squats", Some(145.0), "10, 10, 10"),
-                exercise("Barbell overhead press", Some(80.0), "8, 7, 4"),
-                exercise("Cable single-arm row", Some(95.0), "10, 10, 10"),
-                exercise("Seated flies", Some(140.0), "10, 10, 10"),
-                exercise("Tricep cable pulldown", Some(39.0), "10, 10, 10"),
-            ],
-        ),
-        workout(
-            "seed-2026-06-22",
-            "2026-06-22",
-            vec![
-                exercise("Assisted pull-ups", Some(44.0), "10, 10, 8"),
-                exercise("Barbell squats", Some(145.0), "8, 8, 8"),
-                exercise("Barbell overhead press", Some(75.0), "10, 10, 8"),
-                exercise("Stiff-leg deadlift", Some(105.0), "10, 10, 10"),
-                exercise("Hip abductors", Some(180.0), "10, 10, 10"),
-                exercise("Seated flies", Some(135.0), "10, 10, 10"),
-            ],
-        ),
-        workout(
-            "seed-2026-06-17",
-            "2026-06-17",
-            vec![
-                exercise("Bench press", Some(120.0), "10, 10, 10"),
-                exercise("Elevated split squats", Some(30.0), "8, 8, 8"),
-                exercise("Seated rows", Some(125.0), "10, 10, 8"),
-                exercise("Cable flies", Some(160.0), "10, 10, 10"),
-                exercise("Triceps pulldown", Some(39.0), "10, 10, 10"),
-            ],
-        ),
-        workout(
-            "seed-2026-06-15",
-            "2026-06-15",
-            vec![
-                exercise("Assisted pull-ups", Some(44.0), "8, 8, 8"),
-                exercise("Barbell overhead press", Some(70.0), "10, 10, 10"),
-                exercise("Lat pulldown", Some(115.0), "10, 10, 10"),
-                exercise("Cable single-arm row", Some(90.0), "10, 10, 10"),
-                exercise("Incline dumbbell chest press", Some(40.0), "10, 9, 8"),
-                exercise("Leg press", Some(185.0), "10, 10, 10"),
-            ],
-        ),
-        workout(
-            "seed-2026-06-12",
-            "2026-06-12",
-            vec![
-                exercise("Assisted pull-ups", Some(50.0), "10, 10, 10"),
-                exercise("Bench press", Some(120.0), "8, 8, 8"),
-                exercise("Squats", Some(140.0), "10, 10, 10"),
-                exercise("Dumbbell overhead press", Some(35.0), "10, 10, 7"),
-                exercise("Seated flies", Some(130.0), "10, 10, 10"),
-                exercise("Seated rows", Some(125.0), "10, 8, 8"),
-            ],
-        ),
-        workout(
-            "seed-2026-06-10",
-            "2026-06-10",
-            vec![
-                exercise("Assisted pull-ups", Some(50.0), "10, 10, 9"),
-                exercise("Barbell overhead press", Some(70.0), "10, 10, 7"),
-                exercise("Leg press", Some(180.0), "10, 10, 10"),
-                exercise("Cable flies", Some(120.0), "12, 12, 12"),
-                exercise("Elevated split squats", Some(25.0), "8, 8, 8"),
-                exercise("Triceps pulldown", Some(37.5), "10, 10, 10"),
-            ],
-        ),
-        workout(
-            "seed-2026-06-08",
-            "2026-06-08",
-            vec![
-                exercise("Assisted pull-ups", Some(50.0), "8, 8, 8"),
-                exercise("Bench press", Some(120.0), "8, 7, 6"),
-                exercise("Squats", Some(135.0), "10, 10, 10"),
-                exercise("Dumbbell overhead press", Some(35.0), "10, 9, 7"),
-                exercise("Seated rows", Some(125.0), "10, 8, 8"),
-                exercise("Incline dumbbell chest press", Some(40.0), "9, 5"),
-            ],
-        ),
-    ]
 }
 fn workout_view(
     w: &Workout,
@@ -686,22 +512,6 @@ fn app() -> Html {
     let draft = use_state(Vec::<Exercise>::new);
     let editing_id = use_state(|| None::<String>);
 
-    let reset_form = {
-        let name = name.clone();
-        let weight = weight.clone();
-        let unit = unit.clone();
-        let reps = reps.clone();
-        let details = details.clone();
-        let exercise_pick = exercise_pick.clone();
-        Callback::from(move |_| {
-            name.set(String::new());
-            weight.set(String::new());
-            unit.set("lb".into());
-            reps.set(String::new());
-            details.set(String::new());
-            exercise_pick.set(String::new());
-        })
-    };
     let load_workout = {
         let date = date.clone();
         let note = note.clone();
@@ -769,15 +579,11 @@ fn app() -> Html {
                             .await
                             .unwrap_or_default();
                         let local = LocalStorage::get::<Vec<Workout>>(LOCAL).unwrap_or_default();
-                        if remote.is_empty() {
-                            let merged = merge_workouts(local, seed_workouts());
+                        if !local.is_empty() {
+                            let merged = merge_workouts(remote, local);
                             for w in &merged {
                                 let _ = put_workout(&access_token, &user_id, w).await;
                             }
-                            workouts.set(merged);
-                            status.set("Imported your workout history to Supabase.".into());
-                        } else if !local.is_empty() {
-                            let merged = merge_workouts(remote, local);
                             workouts.set(merged);
                             status.set("Synced with Supabase.".into());
                         } else {
@@ -831,6 +637,30 @@ fn app() -> Html {
             }
         })
     };
+    let reset_editor: Callback<()> = {
+        let date = date.clone();
+        let note = note.clone();
+        let exercise_pick = exercise_pick.clone();
+        let name = name.clone();
+        let weight = weight.clone();
+        let unit = unit.clone();
+        let reps = reps.clone();
+        let details = details.clone();
+        let draft = draft.clone();
+        let editing_id = editing_id.clone();
+        Callback::from(move |_: ()| {
+            date.set(today_string());
+            note.set(String::new());
+            exercise_pick.set(String::new());
+            name.set(String::new());
+            weight.set(String::new());
+            unit.set("lb".into());
+            reps.set(String::new());
+            details.set(String::new());
+            draft.set(Vec::new());
+            editing_id.set(None);
+        })
+    };
     let save = {
         let token = token.clone();
         let uid = uid.clone();
@@ -840,14 +670,15 @@ fn app() -> Html {
         let draft = draft.clone();
         let editing_id = editing_id.clone();
         let status = status.clone();
-        let reset_form = reset_form.clone();
+        let reset_editor = reset_editor.clone();
         Callback::from(move |_| {
             if draft.is_empty() {
                 status.set("Add at least one exercise.".into());
                 return;
             }
+            let previous_id = (*editing_id).clone();
             let w = Workout {
-                id: editing_id
+                id: previous_id
                     .as_ref()
                     .cloned()
                     .unwrap_or_else(|| format!("local-{}", js_sys::Date::now() as u64)),
@@ -859,20 +690,18 @@ fn app() -> Html {
             let uid = (*uid).clone();
             let workouts = workouts.clone();
             let status = status.clone();
-            let reset_form = reset_form.clone();
-            let editing_id = editing_id.clone();
+            let reset_editor = reset_editor.clone();
             spawn_local(async move {
                 if let (Some(t), Some(u)) = (token, uid) {
                     match put_workout(&t, &u, &w).await {
                         Ok(()) => {
                             let mut all = (*workouts).clone();
-                            if let Some(id) = editing_id.as_ref() {
+                            if let Some(id) = previous_id.as_ref() {
                                 all.retain(|existing| existing.id != *id);
                             }
                             all.insert(0, w);
                             workouts.set(all);
-                            reset_form.emit(());
-                            editing_id.set(None);
+                            reset_editor.emit(());
                             status.set("Workout saved to Supabase.".into())
                         }
                         Err(e) => status.set(e),
