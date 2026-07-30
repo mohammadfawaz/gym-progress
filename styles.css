@@ -330,15 +330,6 @@ h2 {
 .grow {
   flex: 1;
 }
-.numbers-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px;
-  gap: 10px;
-  align-items: end;
-}
-.numbers-row .field-label {
-  margin-bottom: 0;
-}
 .remove-exercise {
   width: 32px;
   height: 32px;

@@ -17,7 +17,6 @@ const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
 struct Exercise {
     name: String,
     weight: Option<f64>,
-    unit: String,
     reps: String,
     details: String,
 }
@@ -363,7 +362,7 @@ fn workout_view(
                 <button class="text-button" type="button" onclick={on_edit}>{"Edit"}</button>
                 <button class="text-button" type="button" onclick={on_delete}>{"Delete"}</button>
             </div>
-            { for w.exercises.iter().map(|e| html! { <p class="exercise-summary">{format!("{} · {}{} · {}", e.name, e.weight.map(|v|v.to_string()).unwrap_or_else(||"BW".into()), if e.weight.is_some(){format!(" {}",e.unit)}else{String::new()}, e.reps)}</p> }) }
+            { for w.exercises.iter().map(|e| html! { <p class="exercise-summary">{format!("{} · {} · {}", e.name, e.weight.map(|v| format!("{} lbs", v)).unwrap_or_else(||"BW".into()), e.reps)}</p> }) }
         </article>
     }
 }
@@ -374,7 +373,7 @@ fn draft_view((i, e, on_remove): (usize, &Exercise, Callback<MouseEvent>)) -> Ht
                 <h3>{format!("{}. {}", i + 1, e.name)}</h3>
                 <button class="remove-exercise" type="button" onclick={on_remove}>{"×"}</button>
             </div>
-            <span class="pill">{format!("{} {}", e.weight.map(|v|v.to_string()).unwrap_or_else(||"BW".into()), e.unit)}</span>
+            <span class="pill">{e.weight.map(|v| format!("{} lbs", v)).unwrap_or_else(||"BW".into())}</span>
             <p class="exercise-summary">{format!("{} reps{}", e.reps, if e.details.is_empty(){String::new()}else{format!(" · {}", e.details)})}</p>
         </article>
     }
@@ -476,7 +475,6 @@ struct WorkoutEditorProps {
     note: UseStateHandle<String>,
     name: UseStateHandle<String>,
     weight: UseStateHandle<String>,
-    unit: UseStateHandle<String>,
     reps: UseStateHandle<String>,
     details: UseStateHandle<String>,
     draft: UseStateHandle<Vec<Exercise>>,
@@ -500,7 +498,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         note,
         name,
         weight,
-        unit,
         reps,
         details,
         draft,
@@ -557,7 +554,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                     <label class="field-label">
                         {"Exercise"}
                         <select value={(*name).clone()} onchange={on_name}>
-                            <option value="">{"Choose an exercise"}</option>
                             {for exercise_options.iter().map(|exercise| html!{ <option value={exercise.clone()}>{exercise.clone()}</option> })}
                             <option value={ADD_EXERCISE_VALUE}>{"New Exercise"}</option>
                         </select>
@@ -579,31 +575,16 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                     } else {
                         html! {}
                     }}
-                    <div class="numbers-row">
-                        <label class="field-label">
-                            {"Weight"}
-                            <input
-                                value={(*weight).clone()}
-                                oninput={{
-                                    let weight = weight.clone();
-                                    Callback::from(move |e: InputEvent| weight.set(input_value(e)))
-                                }}
-                            />
-                        </label>
-                        <label class="field-label">
-                            {"Unit"}
-                            <select
-                                value={(*unit).clone()}
-                                onchange={{
-                                    let unit = unit.clone();
-                                    Callback::from(move |e: Event| unit.set(e.target_unchecked_into::<HtmlSelectElement>().value()))
-                                }}
-                            >
-                                <option value="lb">{"lb"}</option>
-                                <option value="bodyweight">{"BW"}</option>
-                            </select>
-                        </label>
-                    </div>
+                    <label class="field-label">
+                        {"Weight"}
+                        <input
+                            value={(*weight).clone()}
+                            oninput={{
+                                let weight = weight.clone();
+                                Callback::from(move |e: InputEvent| weight.set(input_value(e)))
+                            }}
+                        />
+                    </label>
                     <label class="field-label">
                         {"Reps per set"}
                         <input
@@ -662,7 +643,6 @@ fn app() -> Html {
     let name = use_state(String::new);
     let new_exercise_name = use_state(String::new);
     let weight = use_state(String::new);
-    let unit = use_state(|| "lb".to_string());
     let reps = use_state(String::new);
     let details = use_state(String::new);
     let draft = use_state(Vec::<Exercise>::new);
@@ -711,7 +691,6 @@ fn app() -> Html {
         let editing_id = editing_id.clone();
         let name = name.clone();
         let weight = weight.clone();
-        let unit = unit.clone();
         let reps = reps.clone();
         let details = details.clone();
         let new_exercise_name = new_exercise_name.clone();
@@ -723,7 +702,6 @@ fn app() -> Html {
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
-            unit.set("lb".into());
             reps.set(String::new());
             details.set(String::new());
         })
@@ -801,7 +779,6 @@ fn app() -> Html {
         let name = name.clone();
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
-        let unit = unit.clone();
         let reps = reps.clone();
         let details = details.clone();
         let draft = draft.clone();
@@ -816,7 +793,6 @@ fn app() -> Html {
 
             let selected = (*name).clone();
             let weight_value = weight.parse().ok();
-            let unit_value = (*unit).clone();
             let reps_value = (*reps).trim().to_string();
             let details_value = (*details).trim().to_string();
 
@@ -839,7 +815,6 @@ fn app() -> Html {
                 let name = name.clone();
                 let new_exercise_name = new_exercise_name.clone();
                 let weight_state = weight.clone();
-                let unit_state = unit.clone();
                 let reps_state = reps.clone();
                 let details_state = details.clone();
                 spawn_local(async move {
@@ -862,7 +837,6 @@ fn app() -> Html {
                         next.push(Exercise {
                             name: canonical,
                             weight: weight_value,
-                            unit: unit_value,
                             reps: reps_value,
                             details: details_value,
                         });
@@ -870,7 +844,6 @@ fn app() -> Html {
                         name.set(String::new());
                         new_exercise_name.set(String::new());
                         weight_state.set(String::new());
-                        unit_state.set("lb".into());
                         reps_state.set(String::new());
                         details_state.set(String::new());
                         status.set(String::new());
@@ -898,7 +871,6 @@ fn app() -> Html {
             next.push(Exercise {
                 name: canonical_name,
                 weight: weight_value,
-                unit: unit_value,
                 reps: reps_value,
                 details: details_value,
             });
@@ -906,7 +878,6 @@ fn app() -> Html {
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
-            unit.set("lb".into());
             reps.set(String::new());
             details.set(String::new());
         })
@@ -923,7 +894,6 @@ fn app() -> Html {
         let name = name.clone();
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
-        let unit = unit.clone();
         let reps = reps.clone();
         let details = details.clone();
         Callback::from(move |_| {
@@ -939,7 +909,6 @@ fn app() -> Html {
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
-            unit.set("lb".into());
             reps.set(String::new());
             details.set(String::new());
         })
@@ -960,7 +929,6 @@ fn app() -> Html {
         let name = name.clone();
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
-        let unit = unit.clone();
         let reps = reps.clone();
         let details = details.clone();
         let draft = draft.clone();
@@ -971,7 +939,6 @@ fn app() -> Html {
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
-            unit.set("lb".into());
             reps.set(String::new());
             details.set(String::new());
             draft.set(Vec::new());
@@ -1061,7 +1028,6 @@ fn app() -> Html {
         let weight = weight.clone();
         let reps = reps.clone();
         let details = details.clone();
-        let unit = unit.clone();
         let workouts = workouts.clone();
         Callback::from(move |e: Event| {
             let v = e.target_unchecked_into::<HtmlSelectElement>().value();
@@ -1071,17 +1037,14 @@ fn app() -> Html {
                 weight.set(String::new());
                 reps.set(String::new());
                 details.set(String::new());
-                unit.set("lb".into());
             } else if let Some(p) = previous(&workouts, &v) {
                 weight.set(p.weight.map(|x| x.to_string()).unwrap_or_default());
                 reps.set(p.reps);
                 details.set(p.details);
-                unit.set(p.unit);
             } else {
                 weight.set(String::new());
                 reps.set(String::new());
                 details.set(String::new());
-                unit.set("lb".into());
             }
         })
     };
@@ -1103,7 +1066,6 @@ fn app() -> Html {
         note,
         name,
         weight,
-        unit,
         reps,
         details,
         draft,
