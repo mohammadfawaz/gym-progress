@@ -1,6 +1,7 @@
 use gloo_net::http::Request;
 use gloo_storage::{LocalStorage, Storage};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{HtmlInputElement, HtmlSelectElement};
 use yew::prelude::*;
@@ -50,6 +51,150 @@ async fn put_workout(token: &str, uid: &str, w: &Workout) -> Result<(), String> 
 }
 fn input_value(e: InputEvent) -> String { e.target_unchecked_into::<HtmlInputElement>().value() }
 fn previous(workouts: &[Workout], name: &str) -> Option<Exercise> { workouts.iter().flat_map(|w| w.exercises.iter()).find(|e| e.name.eq_ignore_ascii_case(name)).cloned() }
+fn exercise_names(workouts: &[Workout]) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    for workout in workouts {
+        for exercise in &workout.exercises {
+            names.insert(exercise.name.clone());
+        }
+    }
+    names.into_iter().collect()
+}
+fn workout_key(w: &Workout) -> String {
+    serde_json::to_string(&serde_json::json!({
+        "date": w.date,
+        "note": w.note,
+        "exercises": w.exercises,
+    }))
+    .unwrap_or_default()
+}
+fn merge_workouts(mut primary: Vec<Workout>, secondary: Vec<Workout>) -> Vec<Workout> {
+    let mut seen = BTreeSet::new();
+    let mut merged = Vec::new();
+    for workout in primary.drain(..).chain(secondary.into_iter()) {
+        let key = workout_key(&workout);
+        if seen.insert(key) {
+            merged.push(workout);
+        }
+    }
+    merged.sort_by(|a, b| b.date.cmp(&a.date));
+    merged
+}
+fn exercise(name: &str, weight: Option<f64>, reps: &str) -> Exercise {
+    Exercise { name: name.into(), weight, unit: "lb".into(), reps: reps.into(), details: String::new() }
+}
+fn workout(id: &str, date: &str, exercises: Vec<Exercise>) -> Workout {
+    Workout { id: id.into(), date: date.into(), note: String::new(), exercises }
+}
+fn seed_workouts() -> Vec<Workout> {
+    vec![
+        workout("seed-2026-07-28", "2026-07-28", vec![
+            exercise("Bench press", Some(125.0), "9, 9, 9"),
+            exercise("Barbell squats", Some(155.0), "8, 8, 8"),
+            exercise("Dumbbell overhead press", Some(40.0), "8, 8, 6"),
+            exercise("Stiff-leg deadlift", Some(145.0), "10, 10, 10"),
+            exercise("Seated flies", Some(150.0), "10, 10, 8"),
+            exercise("Triceps overhead cable pull", Some(32.5), "10, 10, 10"),
+            exercise("Dumbbell bicep curls", Some(30.0), "8, 8, 8"),
+            exercise("Leg raises", None, "10, 10"),
+        ]),
+        workout("seed-2026-07-20", "2026-07-20", vec![
+            exercise("Barbell overhead press", Some(85.0), "8, 8, 8"),
+            exercise("Split squats", Some(35.0), "8, 8, 8"),
+            exercise("Seated rows", Some(125.0), "6, 6"),
+            exercise("Cable flies", Some(160.0), "8, 8, 8"),
+            exercise("Stiff-leg deadlift", Some(140.0), "10, 10, 10"),
+            exercise("Triceps overhead cable pull", Some(30.0), "8, 8, 8"),
+        ]),
+        workout("seed-2026-07-16", "2026-07-16", vec![
+            exercise("Assisted pull-ups", Some(31.25), "8, 8, 8"),
+            exercise("Barbell squats", Some(150.0), "8, 8, 8"),
+            exercise("Bench press", Some(125.0), "9, 8, 5"),
+            exercise("Cable single-arm row", Some(100.0), "10, 10, 10"),
+            exercise("Dumbbell overhead press", Some(40.0), "10, 8, 7"),
+            exercise("Seated flies", Some(150.0), "10, 8"),
+        ]),
+        workout("seed-2026-07-10", "2026-07-10", vec![
+            exercise("Dumbbell overhead press", Some(40.0), "8, 8, 8"),
+            exercise("Stiff-leg deadlift", Some(135.0), "10, 10, 10"),
+            exercise("Cable chest flies", Some(180.0), "10, 10, 10"),
+            exercise("Tricep cable pulldown", Some(42.5), "10, 10, 10"),
+            exercise("Walking lunges", Some(60.0), "10, 10, 10"),
+            exercise("Lat pulldown", Some(120.0), "10, 10, 10"),
+        ]),
+        workout("seed-2026-07-06", "2026-07-06", vec![
+            exercise("Assisted pull-ups", Some(37.5), "10, 10, 7"),
+            exercise("Bench press", Some(125.0), "9, 7, 6"),
+            exercise("Leg press", Some(190.0), "10, 10, 10"),
+            exercise("Barbell overhead press", Some(80.0), "8, 7"),
+            exercise("Stiff-leg deadlift", Some(135.0), "8, 8, 8"),
+            exercise("Seated flies", Some(145.0), "8, 8, 8"),
+        ]),
+        workout("seed-2026-07-02", "2026-07-02", vec![
+            exercise("Assisted pull-ups", Some(37.5), "8, 8, 8"),
+            exercise("Cable chest press", Some(160.0), "10, 10, 10"),
+            exercise("Split squats", Some(30.0), "8, 8, 8"),
+            exercise("Seated rows", Some(125.0), "10, 10, 7"),
+            exercise("Dumbbell overhead press", Some(35.0), "10, 7, 6"),
+            exercise("Stiff-leg deadlift", Some(125.0), "8, 8, 8"),
+        ]),
+        workout("seed-2026-06-27", "2026-06-27", vec![
+            exercise("Bench press", Some(125.0), "8, 8, 8"),
+            exercise("Barbell squats", Some(145.0), "10, 10, 10"),
+            exercise("Barbell overhead press", Some(80.0), "8, 7, 4"),
+            exercise("Cable single-arm row", Some(95.0), "10, 10, 10"),
+            exercise("Seated flies", Some(140.0), "10, 10, 10"),
+            exercise("Tricep cable pulldown", Some(39.0), "10, 10, 10"),
+        ]),
+        workout("seed-2026-06-22", "2026-06-22", vec![
+            exercise("Assisted pull-ups", Some(44.0), "10, 10, 8"),
+            exercise("Barbell squats", Some(145.0), "8, 8, 8"),
+            exercise("Barbell overhead press", Some(75.0), "10, 10, 8"),
+            exercise("Stiff-leg deadlift", Some(105.0), "10, 10, 10"),
+            exercise("Hip abductors", Some(180.0), "10, 10, 10"),
+            exercise("Seated flies", Some(135.0), "10, 10, 10"),
+        ]),
+        workout("seed-2026-06-17", "2026-06-17", vec![
+            exercise("Bench press", Some(120.0), "10, 10, 10"),
+            exercise("Elevated split squats", Some(30.0), "8, 8, 8"),
+            exercise("Seated rows", Some(125.0), "10, 10, 8"),
+            exercise("Cable flies", Some(160.0), "10, 10, 10"),
+            exercise("Triceps pulldown", Some(39.0), "10, 10, 10"),
+        ]),
+        workout("seed-2026-06-15", "2026-06-15", vec![
+            exercise("Assisted pull-ups", Some(44.0), "8, 8, 8"),
+            exercise("Barbell overhead press", Some(70.0), "10, 10, 10"),
+            exercise("Lat pulldown", Some(115.0), "10, 10, 10"),
+            exercise("Cable single-arm row", Some(90.0), "10, 10, 10"),
+            exercise("Incline dumbbell chest press", Some(40.0), "10, 9, 8"),
+            exercise("Leg press", Some(185.0), "10, 10, 10"),
+        ]),
+        workout("seed-2026-06-12", "2026-06-12", vec![
+            exercise("Assisted pull-ups", Some(50.0), "10, 10, 10"),
+            exercise("Bench press", Some(120.0), "8, 8, 8"),
+            exercise("Squats", Some(140.0), "10, 10, 10"),
+            exercise("Dumbbell overhead press", Some(35.0), "10, 10, 7"),
+            exercise("Seated flies", Some(130.0), "10, 10, 10"),
+            exercise("Seated rows", Some(125.0), "10, 8, 8"),
+        ]),
+        workout("seed-2026-06-10", "2026-06-10", vec![
+            exercise("Assisted pull-ups", Some(50.0), "10, 10, 9"),
+            exercise("Barbell overhead press", Some(70.0), "10, 10, 7"),
+            exercise("Leg press", Some(180.0), "10, 10, 10"),
+            exercise("Cable flies", Some(120.0), "12, 12, 12"),
+            exercise("Elevated split squats", Some(25.0), "8, 8, 8"),
+            exercise("Triceps pulldown", Some(37.5), "10, 10, 10"),
+        ]),
+        workout("seed-2026-06-08", "2026-06-08", vec![
+            exercise("Assisted pull-ups", Some(50.0), "8, 8, 8"),
+            exercise("Bench press", Some(120.0), "8, 7, 6"),
+            exercise("Squats", Some(135.0), "10, 10, 10"),
+            exercise("Dumbbell overhead press", Some(35.0), "10, 9, 7"),
+            exercise("Seated rows", Some(125.0), "10, 8, 8"),
+            exercise("Incline dumbbell chest press", Some(40.0), "9, 5"),
+        ]),
+    ]
+}
 fn workout_view(w: &Workout) -> Html { html! { <article class="workout-card"><div class="workout-card-top"><div><time>{w.date.clone()}</time><h3>{if w.note.is_empty(){format!("{} exercises",w.exercises.len())}else{w.note.clone()}}</h3></div><span class="pill">{format!("{} lifts",w.exercises.len())}</span></div>{ for w.exercises.iter().map(|e| html! { <p class="exercise-summary">{format!("{} · {}{} · {}", e.name, e.weight.map(|v|v.to_string()).unwrap_or_else(||"Bodyweight".into()), if e.weight.is_some(){format!(" {}",e.unit)}else{String::new()}, e.reps)}</p> }) }</article> } }
 fn draft_view((i,e): (usize, &Exercise)) -> Html { html! { <article class="exercise-entry"><div class="entry-head"><h3>{format!("{}. {}",i+1,e.name)}</h3><span class="pill">{format!("{} {}",e.weight.map(|v|v.to_string()).unwrap_or_else(||"Bodyweight".into()),e.unit)}</span></div><p class="exercise-summary">{format!("{} reps{}",e.reps,if e.details.is_empty(){String::new()}else{format!(" · {}",e.details)})}</p></article> } }
 
@@ -57,12 +202,14 @@ fn draft_view((i,e): (usize, &Exercise)) -> Html { html! { <article class="exerc
 fn app() -> Html {
     let token = use_state(|| None::<String>); let uid = use_state(|| None::<String>); let workouts = use_state(Vec::<Workout>::new); let status = use_state(String::new);
     let email = use_state(String::new); let password = use_state(String::new); let signup = use_state(|| false);
-    let date = use_state(|| "2026-07-30".to_string()); let note = use_state(String::new); let name = use_state(String::new); let weight = use_state(String::new); let unit = use_state(|| "lb".to_string()); let reps = use_state(String::new); let details = use_state(String::new); let draft = use_state(Vec::<Exercise>::new);
-    let submit_auth = { let email=email.clone(); let password=password.clone(); let signup=signup.clone(); let token=token.clone(); let uid=uid.clone(); let workouts=workouts.clone(); let status=status.clone(); Callback::from(move |e:SubmitEvent| { e.prevent_default(); let email=(*email).clone(); let password=(*password).clone(); let is_signup=*signup; let token=token.clone(); let uid=uid.clone(); let workouts=workouts.clone(); let status=status.clone(); spawn_local(async move { status.set("Connecting…".into()); match auth(&email,&password,is_signup).await { Ok(a)=>{ let Some(access_token) = auth_token(&a) else { if is_signup { status.set("Account created. Check your email to confirm it, then sign in.".into()); } else { status.set("Sign-in succeeded but Supabase did not return a session token.".into()); } return; }; let Some(user_id) = auth_user_id(&a) else { status.set("Signed in, but Supabase did not return a user id.".into()); return; }; let remote=get_workouts(&access_token,&user_id).await.unwrap_or_default(); let local=LocalStorage::get::<Vec<Workout>>(LOCAL).unwrap_or_default(); if remote.is_empty() && !local.is_empty() { for w in &local { let _=put_workout(&access_token,&user_id,w).await; } workouts.set(local); status.set("Existing workouts migrated and synced.".into()); } else { workouts.set(remote); status.set("Synced with Supabase.".into()); } token.set(Some(access_token)); uid.set(Some(user_id)); } Err(e)=>status.set(e), } }); }) };
+    let date = use_state(|| "2026-07-30".to_string()); let note = use_state(String::new); let exercise_pick = use_state(String::new); let name = use_state(String::new); let weight = use_state(String::new); let unit = use_state(|| "lb".to_string()); let reps = use_state(String::new); let details = use_state(String::new); let draft = use_state(Vec::<Exercise>::new);
+    let submit_auth = { let email=email.clone(); let password=password.clone(); let signup=signup.clone(); let token=token.clone(); let uid=uid.clone(); let workouts=workouts.clone(); let status=status.clone(); Callback::from(move |e:SubmitEvent| { e.prevent_default(); let email=(*email).clone(); let password=(*password).clone(); let is_signup=*signup; let token=token.clone(); let uid=uid.clone(); let workouts=workouts.clone(); let status=status.clone(); spawn_local(async move { status.set("Connecting…".into()); match auth(&email,&password,is_signup).await { Ok(a)=>{ let Some(access_token) = auth_token(&a) else { if is_signup { status.set("Account created. Check your email to confirm it, then sign in.".into()); } else { status.set("Sign-in succeeded but Supabase did not return a session token.".into()); } return; }; let Some(user_id) = auth_user_id(&a) else { status.set("Signed in, but Supabase did not return a user id.".into()); return; }; let remote=get_workouts(&access_token,&user_id).await.unwrap_or_default(); let local=LocalStorage::get::<Vec<Workout>>(LOCAL).unwrap_or_default(); if remote.is_empty() { let merged = merge_workouts(local, seed_workouts()); for w in &merged { let _ = put_workout(&access_token,&user_id,w).await; } workouts.set(merged); status.set("Imported your workout history to Supabase.".into()); } else if !local.is_empty() { let merged = merge_workouts(remote, local); workouts.set(merged); status.set("Synced with Supabase.".into()); } else { workouts.set(remote); status.set("Synced with Supabase.".into()); } token.set(Some(access_token)); uid.set(Some(user_id)); } Err(e)=>status.set(e), } }); }) };
     let add = { let name=name.clone(); let weight=weight.clone(); let unit=unit.clone(); let reps=reps.clone(); let details=details.clone(); let draft=draft.clone(); let status=status.clone(); Callback::from(move |_| { if name.trim().is_empty()||reps.trim().is_empty(){status.set("Add an exercise name and reps first.".into());return} let mut next=(*draft).clone(); next.push(Exercise{name:(*name).trim().into(),weight:weight.parse().ok(),unit:(*unit).clone(),reps:(*reps).trim().into(),details:(*details).trim().into()}); draft.set(next); name.set(String::new());weight.set(String::new());reps.set(String::new());details.set(String::new()); }) };
     let save = { let token=token.clone(); let uid=uid.clone(); let workouts=workouts.clone(); let date=date.clone(); let note=note.clone(); let draft=draft.clone(); let status=status.clone(); Callback::from(move |_| { if draft.is_empty(){status.set("Add at least one exercise.".into());return} let w=Workout{id:format!("local-{}",js_sys::Date::now() as u64),date:(*date).clone(),note:(*note).clone(),exercises:(*draft).clone()}; let token=(*token).clone();let uid=(*uid).clone();let workouts=workouts.clone();let status=status.clone();spawn_local(async move {if let(Some(t),Some(u))=(token,uid){match put_workout(&t,&u,&w).await{Ok(())=>{let mut all=(*workouts).clone();all.insert(0,w);workouts.set(all);status.set("Workout saved to Supabase.".into())},Err(e)=>status.set(e)}}}); }) };
     if token.is_none() { return html! { <main class="app-shell"><div class="hero-card"><p class="eyebrow">{"PERSONAL TRAINING LOG"}</p><h1>{"Lift Log"}</h1><h2>{"Train with your history."}</h2><p>{"Sign in to sync across devices."}</p></div><form class="auth-card" onsubmit={submit_auth}><label class="field-label">{"Email"}<input type="email" value={(*email).clone()} oninput={let email=email.clone();Callback::from(move|e:InputEvent|email.set(input_value(e)))} required=true /></label><label class="field-label">{"Password"}<input type="password" value={(*password).clone()} oninput={let password=password.clone();Callback::from(move|e:InputEvent|password.set(input_value(e)))} required=true minlength="6" /></label><button class="primary-button" type="submit">{if *signup{"Create account"}else{"Sign in"}}<span>{"→"}</span></button></form><button class="text-button auth-toggle" onclick={let signup=signup.clone();Callback::from(move |_|signup.set(!*signup))}>{if *signup{"Already have an account? Sign in"}else{"Need an account? Create one"}}</button><p class="subtle">{(*status).clone()}</p></main> }; }
-    let on_name = { let name=name.clone();let weight=weight.clone();let reps=reps.clone();let workouts=workouts.clone();Callback::from(move|e:InputEvent|{let v=input_value(e);name.set(v.clone());if let Some(p)=previous(&workouts,&v){weight.set(p.weight.map(|x|x.to_string()).unwrap_or_default());reps.set(p.reps)}}) };
-    html! { <main class="app-shell"><header class="topbar"><div><p class="eyebrow">{"PERSONAL TRAINING LOG"}</p><h1>{"Lift Log"}</h1></div><span class="pill">{"SYNCED"}</span></header><section class="hero-card"><p class="eyebrow">{"NEW WORKOUT"}</p><h2>{"Keep the streak moving."}</h2><p>{"Your previous numbers prefill as targets."}</p></section><section class="workout-form"><label class="field-label">{"Date"}<input type="date" value={(*date).clone()} oninput={let date=date.clone();Callback::from(move|e:InputEvent|date.set(input_value(e)))}/></label><label class="field-label">{"Session note"}<input value={(*note).clone()} oninput={let note=note.clone();Callback::from(move|e:InputEvent|note.set(input_value(e)))}/></label><div class="exercise-entry"><label class="field-label">{"Exercise"}<input value={(*name).clone()} oninput={on_name} placeholder="Bench press" /></label><div class="numbers-row"><label class="field-label">{"Weight"}<input value={(*weight).clone()} oninput={let weight=weight.clone();Callback::from(move|e:InputEvent|weight.set(input_value(e)))}/></label><label class="field-label">{"Unit"}<select value={(*unit).clone()} onchange={let unit=unit.clone();Callback::from(move|e:Event|unit.set(e.target_unchecked_into::<HtmlSelectElement>().value()))}><option value="lb">{"lb"}</option><option value="kg">{"kg"}</option><option value="bodyweight">{"bodyweight"}</option></select></label></div><label class="field-label">{"Reps per set"}<input value={(*reps).clone()} oninput={let reps=reps.clone();Callback::from(move|e:InputEvent|reps.set(input_value(e)))} placeholder="8, 8, 6" /></label><label class="field-label">{"Details"}<input value={(*details).clone()} oninput={let details=details.clone();Callback::from(move|e:InputEvent|details.set(input_value(e)))} /></label><button class="add-button" type="button" onclick={add}>{"+ Add exercise"}</button></div>{for draft.iter().enumerate().map(draft_view)}<button class="primary-button save-button" type="button" onclick={save}>{"Save workout"}<span>{"✓"}</span></button><p class="subtle">{(*status).clone()}</p></section><div class="section-heading"><div><p class="eyebrow">{"YOUR LOG"}</p><h2>{"Workout history"}</h2></div></div><div class="workout-list">{for workouts.iter().map(workout_view)}</div></main> }
+    let on_name = { let name=name.clone();let weight=weight.clone();let reps=reps.clone();let exercise_pick=exercise_pick.clone();let workouts=workouts.clone();Callback::from(move|e:InputEvent|{let v=input_value(e);exercise_pick.set(String::new());name.set(v.clone());if let Some(p)=previous(&workouts,&v){weight.set(p.weight.map(|x|x.to_string()).unwrap_or_default());reps.set(p.reps)}}) };
+    let on_pick = { let exercise_pick=exercise_pick.clone(); let name=name.clone(); let weight=weight.clone(); let unit=unit.clone(); let reps=reps.clone(); let details=details.clone(); let workouts=workouts.clone(); Callback::from(move|e:Event|{let choice=e.target_unchecked_into::<HtmlSelectElement>().value(); if choice.is_empty(){return;} name.set(choice.clone()); if let Some(p)=previous((*workouts).as_slice(), &choice){weight.set(p.weight.map(|x|x.to_string()).unwrap_or_default());unit.set(p.unit);reps.set(p.reps);details.set(p.details);} exercise_pick.set(String::new());}) };
+    let exercise_options = exercise_names(&workouts);
+    html! { <main class="app-shell"><header class="topbar"><div><p class="eyebrow">{"PERSONAL TRAINING LOG"}</p><h1>{"Lift Log"}</h1></div><span class="pill">{"SYNCED"}</span></header><section class="hero-card"><p class="eyebrow">{"NEW WORKOUT"}</p><h2>{"Keep the streak moving."}</h2><p>{"Your previous numbers prefill as targets."}</p></section><section class="workout-form"><label class="field-label">{"Date"}<input type="date" value={(*date).clone()} oninput={let date=date.clone();Callback::from(move|e:InputEvent|date.set(input_value(e)))}/></label><label class="field-label">{"Session note"}<input value={(*note).clone()} oninput={let note=note.clone();Callback::from(move|e:InputEvent|note.set(input_value(e)))}/></label><label class="field-label">{"Pick from history"}<select value={(*exercise_pick).clone()} onchange={on_pick}><option value="">{"Choose a previous exercise"}</option>{ for exercise_options.iter().map(|name| html!{ <option value={name.clone()}>{name.clone()}</option> }) }</select></label><div class="exercise-entry"><label class="field-label">{"Exercise"}<input value={(*name).clone()} oninput={on_name} placeholder="Bench press" /></label><div class="numbers-row"><label class="field-label">{"Weight"}<input value={(*weight).clone()} oninput={let weight=weight.clone();Callback::from(move|e:InputEvent|weight.set(input_value(e)))}/></label><label class="field-label">{"Unit"}<select value={(*unit).clone()} onchange={let unit=unit.clone();Callback::from(move|e:Event|unit.set(e.target_unchecked_into::<HtmlSelectElement>().value()))}><option value="lb">{"lb"}</option><option value="kg">{"kg"}</option><option value="bodyweight">{"bodyweight"}</option></select></label></div><label class="field-label">{"Reps per set"}<input value={(*reps).clone()} oninput={let reps=reps.clone();Callback::from(move|e:InputEvent|reps.set(input_value(e)))} placeholder="8, 8, 6" /></label><label class="field-label">{"Details"}<input value={(*details).clone()} oninput={let details=details.clone();Callback::from(move|e:InputEvent|details.set(input_value(e)))} /></label><button class="add-button" type="button" onclick={add}>{"+ Add exercise"}</button></div>{for draft.iter().enumerate().map(draft_view)}<button class="primary-button save-button" type="button" onclick={save}>{"Save workout"}<span>{"✓"}</span></button><p class="subtle">{(*status).clone()}</p></section><div class="section-heading"><div><p class="eyebrow">{"YOUR LOG"}</p><h2>{"Workout history"}</h2></div></div><div class="workout-list">{for workouts.iter().map(workout_view)}</div></main> }
 }
 fn main() { yew::Renderer::<App>::new().render(); }
