@@ -316,6 +316,15 @@ fn canonicalize_workouts(
         .map(|w| canonicalize_workout(&w, aliases))
         .collect()
 }
+fn exercise_names_from_workouts(workouts: &[Workout]) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    for workout in workouts {
+        for exercise in &workout.exercises {
+            names.insert(exercise.name.clone());
+        }
+    }
+    names.into_iter().collect()
+}
 fn workout_key(w: &Workout) -> String {
     serde_json::to_string(&serde_json::json!({
         "date": w.date,
@@ -1076,6 +1085,19 @@ fn app() -> Html {
             }
         })
     };
+    let exercise_options = {
+        let mut options = (*exercise_catalog).clone();
+        for name in exercise_names_from_workouts(&workouts) {
+            if !options
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&name))
+            {
+                options.push(name);
+            }
+        }
+        options.sort();
+        options
+    };
     workout_editor_view(WorkoutEditorProps {
         date,
         note,
@@ -1096,7 +1118,7 @@ fn app() -> Html {
         logout,
         load_workout,
         delete_selected,
-        exercise_options: (*exercise_catalog).clone(),
+        exercise_options,
     })
 }
 fn main() {

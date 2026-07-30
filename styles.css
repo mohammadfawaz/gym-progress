@@ -392,12 +392,17 @@ h2 {
     max-height: calc(100vh - 60px);
   }
 }
-.auth-card,
-.workout-form {
+.auth-card {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 18px;
+}
+
+.workout-form {
+  background: transparent;
+  border: 0;
+  padding: 0;
 }
 .auth-toggle {
   display: block;
