@@ -11,6 +11,7 @@ const KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIs
 const LOCAL: &str = "lift-log-v1";
 const AUTH_TOKEN_KEY: &str = "lift-log-auth-token";
 const AUTH_UID_KEY: &str = "lift-log-auth-uid";
+const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Exercise {
@@ -486,7 +487,6 @@ struct WorkoutEditorProps {
     new_exercise_name: UseStateHandle<String>,
     on_name: Callback<Event>,
     on_pick: Callback<Event>,
-    add_new_exercise: Callback<MouseEvent>,
     add: Callback<MouseEvent>,
     remove_draft: Callback<usize>,
     save: Callback<MouseEvent>,
@@ -514,7 +514,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         new_exercise_name,
         on_name,
         on_pick,
-        add_new_exercise,
         add,
         remove_draft,
         save,
@@ -572,9 +571,27 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                         {"Exercise"}
                         <select value={(*name).clone()} onchange={on_name}>
                             <option value="">{"Choose an exercise"}</option>
+                            <option value={ADD_EXERCISE_VALUE}>{"Add exercise"}</option>
                             {for exercise_options.iter().map(|exercise| html!{ <option value={exercise.clone()}>{exercise.clone()}</option> })}
                         </select>
                     </label>
+                    {if *name == ADD_EXERCISE_VALUE {
+                        html! {
+                            <label class="field-label">
+                                {"New exercise name"}
+                                <input
+                                    value={(*new_exercise_name).clone()}
+                                    oninput={{
+                                        let new_exercise_name = new_exercise_name.clone();
+                                        Callback::from(move |e: InputEvent| new_exercise_name.set(input_value(e)))
+                                    }}
+                                    placeholder="Romanian deadlift"
+                                />
+                            </label>
+                        }
+                    } else {
+                        html! {}
+                    }}
                     <div class="numbers-row">
                         <label class="field-label">
                             {"Weight"}
@@ -622,22 +639,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                         />
                     </label>
                     <button class="add-button" type="button" onclick={add}>{"+ Add exercise"}</button>
-                </div>
-                <div class="exercise-entry">
-                    <label class="field-label">
-                        {"Add new exercise to database"}
-                        <input
-                            value={(*new_exercise_name).clone()}
-                            oninput={{
-                                let new_exercise_name = new_exercise_name.clone();
-                                Callback::from(move |e: InputEvent| new_exercise_name.set(input_value(e)))
-                            }}
-                            placeholder="Romanian deadlift"
-                        />
-                    </label>
-                    <button class="text-button" type="button" onclick={add_new_exercise}>
-                        {"Add to database"}
-                    </button>
                 </div>
                 {draft_entries(&draft, remove_draft)}
                 <button class="primary-button save-button" type="button" onclick={save}>
@@ -812,7 +813,9 @@ fn app() -> Html {
         })
     };
     let add = {
+        let token = token.clone();
         let name = name.clone();
+        let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
         let unit = unit.clone();
         let reps = reps.clone();
@@ -822,25 +825,102 @@ fn app() -> Html {
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
         Callback::from(move |_| {
-            if name.trim().is_empty() || reps.trim().is_empty() {
-                status.set("Choose an exercise and enter reps first.".into());
+            if reps.trim().is_empty() {
+                status.set("Enter reps first.".into());
                 return;
             }
-            let canonical_name = canonicalize_name(&name, &exercise_aliases);
-            if !exercise_catalog.iter().any(|item| item == &canonical_name) {
+
+            let selected = (*name).clone();
+            let weight_value = weight.parse().ok();
+            let unit_value = (*unit).clone();
+            let reps_value = (*reps).trim().to_string();
+            let details_value = (*details).trim().to_string();
+
+            if selected == ADD_EXERCISE_VALUE {
+                let canonical = title_case_name(new_exercise_name.trim());
+                if canonical.is_empty() {
+                    status.set("Enter a new exercise name first.".into());
+                    return;
+                }
+
+                let already_exists = exercise_catalog
+                    .iter()
+                    .any(|item| item.eq_ignore_ascii_case(&canonical));
+
+                let token = (*token).clone();
+                let draft = draft.clone();
+                let status = status.clone();
+                let exercise_catalog = exercise_catalog.clone();
+                let exercise_aliases = exercise_aliases.clone();
+                let name = name.clone();
+                let new_exercise_name = new_exercise_name.clone();
+                let weight_state = weight.clone();
+                let unit_state = unit.clone();
+                let reps_state = reps.clone();
+                let details_state = details.clone();
+                spawn_local(async move {
+                    if let Some(t) = token {
+                        if !already_exists {
+                            if let Err(e) = put_exercise_catalog(&t, &canonical).await {
+                                status.set(e);
+                                return;
+                            }
+                            let mut next = (*exercise_catalog).clone();
+                            next.push(canonical.clone());
+                            next.sort();
+                            next.dedup();
+                            exercise_catalog.set(next);
+                            let mut aliases = (*exercise_aliases).clone();
+                            aliases.insert(canonical.to_ascii_lowercase(), canonical.clone());
+                            exercise_aliases.set(aliases);
+                        }
+                        let mut next = (*draft).clone();
+                        next.push(Exercise {
+                            name: canonical,
+                            weight: weight_value,
+                            unit: unit_value,
+                            reps: reps_value,
+                            details: details_value,
+                        });
+                        draft.set(next);
+                        name.set(String::new());
+                        new_exercise_name.set(String::new());
+                        weight_state.set(String::new());
+                        unit_state.set("lb".into());
+                        reps_state.set(String::new());
+                        details_state.set(String::new());
+                        status.set(String::new());
+                    } else {
+                        status.set("Sign in first.".into());
+                    }
+                });
+                return;
+            }
+
+            if selected.trim().is_empty() {
+                status.set("Choose an exercise first.".into());
+                return;
+            }
+
+            let canonical_name = canonicalize_name(&selected, &exercise_aliases);
+            if !exercise_catalog
+                .iter()
+                .any(|item| item.eq_ignore_ascii_case(&canonical_name))
+            {
                 status.set("Choose an exercise from the database list.".into());
                 return;
             }
             let mut next = (*draft).clone();
             next.push(Exercise {
                 name: canonical_name,
-                weight: weight.parse().ok(),
-                unit: (*unit).clone(),
-                reps: (*reps).trim().into(),
-                details: (*details).trim().into(),
+                weight: weight_value,
+                unit: unit_value,
+                reps: reps_value,
+                details: details_value,
             });
             draft.set(next);
             name.set(String::new());
+            new_exercise_name.set(String::new());
             weight.set(String::new());
             unit.set("lb".into());
             reps.set(String::new());
@@ -880,58 +960,6 @@ fn app() -> Html {
             unit.set("lb".into());
             reps.set(String::new());
             details.set(String::new());
-        })
-    };
-    let add_new_exercise = {
-        let token = token.clone();
-        let status = status.clone();
-        let new_exercise_name = new_exercise_name.clone();
-        let exercise_catalog = exercise_catalog.clone();
-        let exercise_aliases = exercise_aliases.clone();
-        let name = name.clone();
-        Callback::from(move |_| {
-            let canonical = title_case_name(new_exercise_name.trim());
-            if canonical.is_empty() {
-                status.set("Enter a new exercise name first.".into());
-                return;
-            }
-            if exercise_catalog
-                .iter()
-                .any(|item| item.eq_ignore_ascii_case(&canonical))
-            {
-                name.set(canonical.clone());
-                new_exercise_name.set(String::new());
-                status.set("That exercise already exists.".into());
-                return;
-            }
-            let token = (*token).clone();
-            let status = status.clone();
-            let exercise_catalog = exercise_catalog.clone();
-            let exercise_aliases = exercise_aliases.clone();
-            let new_exercise_name = new_exercise_name.clone();
-            let name = name.clone();
-            spawn_local(async move {
-                if let Some(t) = token {
-                    match put_exercise_catalog(&t, &canonical).await {
-                        Ok(()) => {
-                            let mut next = (*exercise_catalog).clone();
-                            next.push(canonical.clone());
-                            next.sort();
-                            next.dedup();
-                            exercise_catalog.set(next);
-                            let mut aliases = (*exercise_aliases).clone();
-                            aliases.insert(canonical.to_ascii_lowercase(), canonical.clone());
-                            exercise_aliases.set(aliases);
-                            name.set(canonical.clone());
-                            new_exercise_name.set(String::new());
-                            status.set("Added exercise to the database.".into());
-                        }
-                        Err(e) => status.set(e),
-                    }
-                } else {
-                    status.set("Sign in first.".into());
-                }
-            });
         })
     };
     let remove_draft = {
@@ -1049,6 +1077,7 @@ fn app() -> Html {
     }
     let on_name = {
         let name = name.clone();
+        let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
         let reps = reps.clone();
         let details = details.clone();
@@ -1059,7 +1088,13 @@ fn app() -> Html {
             let v = e.target_unchecked_into::<HtmlSelectElement>().value();
             exercise_pick.set(String::new());
             name.set(v.clone());
-            if let Some(p) = previous(&workouts, &v) {
+            if v == ADD_EXERCISE_VALUE {
+                new_exercise_name.set(String::new());
+                weight.set(String::new());
+                reps.set(String::new());
+                details.set(String::new());
+                unit.set("lb".into());
+            } else if let Some(p) = previous(&workouts, &v) {
                 weight.set(p.weight.map(|x| x.to_string()).unwrap_or_default());
                 reps.set(p.reps);
                 details.set(p.details);
@@ -1075,6 +1110,7 @@ fn app() -> Html {
     let on_pick = {
         let exercise_pick = exercise_pick.clone();
         let name = name.clone();
+        let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
         let reps = reps.clone();
         let details = details.clone();
@@ -1086,6 +1122,7 @@ fn app() -> Html {
                 return;
             }
             name.set(choice.clone());
+            new_exercise_name.set(String::new());
             if let Some(p) = previous((*workouts).as_slice(), &choice) {
                 weight.set(p.weight.map(|x| x.to_string()).unwrap_or_default());
                 reps.set(p.reps);
@@ -1117,7 +1154,6 @@ fn app() -> Html {
         new_exercise_name,
         on_name,
         on_pick,
-        add_new_exercise,
         add,
         remove_draft,
         save,
