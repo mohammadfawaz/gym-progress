@@ -1,2 +1,11 @@
 dist/
 target/
+.trunk/out/
+.trunk/logs/
+.trunk/actions/
+.trunk/notifications/
+.trunk/tools/
+.trunk/plugins/
+.trunk/tmp/
+.trunk/user.yaml
+.trunk/user_trunk.yaml
