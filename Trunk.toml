@@ -1,0 +1,7 @@
+dist = "dist"
+public_url = "/gym-progress/"
+
+[[hooks]]
+stage = "post_build"
+command = "sh"
+command_arguments = ["-c", "cp -f styles.css $TRUNK_STAGING_DIR/styles.css"]
