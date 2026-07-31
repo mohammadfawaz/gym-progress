@@ -847,6 +847,7 @@ fn app() -> Html {
                 let already_exists = exercise_catalog
                     .iter()
                     .any(|item| item.eq_ignore_ascii_case(&canonical));
+                let canonical_for_select = canonical.clone();
 
                 let token = (*token).clone();
                 let draft = draft.clone();
@@ -883,7 +884,7 @@ fn app() -> Html {
                             details: details_value,
                         });
                         draft.set(next);
-                        name.set(String::new());
+                        name.set(canonical_for_select);
                         new_exercise_name.set(String::new());
                         weight_state.set(String::new());
                         set_reps_state.set(default_set_reps());
@@ -903,6 +904,7 @@ fn app() -> Html {
             }
 
             let canonical_name = canonicalize_name(&selected, &exercise_aliases);
+            let canonical_for_select = canonical_name.clone();
             let mut next = (*draft).clone();
             next.push(Exercise {
                 name: canonical_name,
@@ -911,7 +913,7 @@ fn app() -> Html {
                 details: details_value,
             });
             draft.set(next);
-            name.set(String::new());
+            name.set(canonical_for_select);
             new_exercise_name.set(String::new());
             weight.set(String::new());
             set_reps.set(default_set_reps());
