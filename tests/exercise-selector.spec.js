@@ -113,53 +113,30 @@ test('can add an existing exercise and a new exercise', async ({ page }) => {
 
   const select = page.getByTestId('exercise-select');
   const weight = page.getByTestId('weight-input');
-  const reps = page.getByTestId('reps-input');
+  const set1 = page.getByTestId('set-rep-1');
+  const set2 = page.getByTestId('set-rep-2');
   const addButton = page.getByTestId('add-exercise-button');
 
   await select.selectOption('Cable Chest Press');
   await weight.fill('160');
-  await reps.fill('10, 10, 10');
+  await expect(set1).toContainText('10');
+  await set1.click();
+  await set1.click();
   await addButton.click();
 
   await expect(page.locator('.workout-form .exercise-entry')).toContainText('Cable Chest Press');
-  await expect(page.locator('.workout-form .exercise-entry')).toContainText('160 lbs');
+  await expect(page.locator('.workout-form .exercise-entry')).toContainText('8, 10, 10');
 
   await select.selectOption('__add_exercise__');
   await expect(page.getByTestId('new-exercise-name')).toBeVisible();
   await page.getByTestId('new-exercise-name').fill('Romanian Deadlift');
   await weight.fill('135');
-  await reps.fill('8, 8, 6');
+  await expect(set2).toContainText('10');
+  await set2.click();
   await addButton.click();
 
   await expect(page.locator('.workout-form .exercise-entry')).toContainText('Romanian Deadlift');
   await expect(catalogRequests).toContainEqual(expect.objectContaining({
     canonical_name: 'Romanian Deadlift',
   }));
-});
-
-test('can switch to the charts tab', async ({ page }) => {
-  await mockSupabase(page, {
-    workouts: [
-      {
-        id: 'seed-1',
-        date: '2026-07-30',
-        note: '',
-        exercises: [
-          {
-            name: 'Bench Press',
-            weight: 125,
-            unit: 'lb',
-            reps: '8, 8, 8',
-            details: '',
-          },
-        ],
-      },
-    ],
-  });
-
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Charts' }).click();
-  await expect(page.getByRole('heading', { name: 'Progress' })).toBeVisible();
-  await expect(page.getByTestId('chart-exercise-select')).toBeVisible();
-  await expect(page.locator('.progress-chart')).toBeVisible();
 });

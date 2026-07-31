@@ -195,91 +195,6 @@ h2 {
   margin: 12px 0 0;
   font-size: 13px;
 }
-.chart-section {
-  margin-bottom: 24px;
-}
-.chart-summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.progress-chart-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 12px 12px 8px;
-  overflow: hidden;
-}
-.progress-chart {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-.chart-axis,
-.chart-gridline {
-  stroke: #5a4042;
-  stroke-width: 1;
-}
-.chart-gridline {
-  stroke-dasharray: 3 4;
-  opacity: 0.45;
-}
-.chart-line {
-  fill: none;
-  stroke: var(--lime);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.chart-point {
-  fill: #fff3ee;
-  stroke: var(--lime);
-  stroke-width: 2;
-}
-.chart-x-label,
-.chart-y-label {
-  fill: var(--muted);
-  font-size: 10px;
-}
-.chart-x-label {
-  dominant-baseline: hanging;
-}
-.chart-y-label {
-  text-anchor: end;
-}
-.chart-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 14px;
-}
-.chart-card strong {
-  display: block;
-  font-size: 20px;
-  margin: 6px 0 4px;
-  line-height: 1.2;
-}
-.chart-card span {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
-.chart-note {
-  margin-top: 12px;
-}
-.chart-list {
-  display: grid;
-  gap: 12px;
-}
-.chart-row-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 8px;
-  font-size: 13px;
-}
 .pill {
   background: #3a2223;
   color: var(--lime);
@@ -288,40 +203,6 @@ h2 {
   white-space: nowrap;
   font-size: 11px;
   font-weight: 800;
-}
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 0;
-  background: rgba(21, 17, 17, 0.94);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid var(--line);
-  padding: 8px max(18px, env(safe-area-inset-right))
-    calc(8px + env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
-}
-.nav-item {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  width: min(150px, 33vw);
-  padding: 5px;
-  font-size: 11px;
-}
-.nav-item span {
-  display: block;
-  font-size: 21px;
-  line-height: 22px;
-}
-.nav-item.active {
-  color: var(--lime);
-  font-weight: 800;
-}
-.nav-item.active span {
-  color: var(--lime);
 }
 .view {
   display: none;
@@ -420,6 +301,36 @@ h2 {
   font-size: 14px;
   font-weight: 800;
   white-space: nowrap;
+}
+.sets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.set-chip {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #241a1b;
+  color: var(--ink);
+  padding: 12px 10px;
+  min-height: 74px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  align-content: center;
+}
+.set-chip span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+.set-chip strong {
+  font-size: 24px;
+  line-height: 1;
+}
+.sets-hint {
+  margin: -2px 0 0;
 }
 .exercise-entries {
   display: grid;

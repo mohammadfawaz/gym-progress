@@ -13,12 +13,6 @@ const AUTH_TOKEN_KEY: &str = "lift-log-auth-token";
 const AUTH_UID_KEY: &str = "lift-log-auth-uid";
 const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum AppTab {
-    Log,
-    Charts,
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Exercise {
     name: String,
@@ -235,6 +229,25 @@ fn clear_auth() {
 }
 fn input_value(e: InputEvent) -> String {
     e.target_unchecked_into::<HtmlInputElement>().value()
+}
+fn default_set_reps() -> [u32; 3] {
+    [10, 10, 10]
+}
+fn parse_set_reps(reps: &str) -> [u32; 3] {
+    let mut slots = default_set_reps();
+    for (index, part) in reps.split(',').take(3).enumerate() {
+        if let Ok(value) = part.trim().parse::<u32>() {
+            slots[index] = value;
+        }
+    }
+    slots
+}
+fn format_set_reps(slots: &[u32; 3]) -> String {
+    slots
+        .iter()
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 fn previous(workouts: &[Workout], name: &str) -> Option<Exercise> {
     workouts
@@ -476,185 +489,13 @@ fn history_view(
     }
 }
 
-fn exercise_progress_points(workouts: &[Workout], exercise_name: &str) -> Vec<(String, f64)> {
-    let mut points = workouts
-        .iter()
-        .filter_map(|workout| {
-            workout.exercises.iter().find_map(|exercise| {
-                if exercise.name.eq_ignore_ascii_case(exercise_name) {
-                    exercise.weight.map(|weight| (workout.date.clone(), weight))
-                } else {
-                    None
-                }
-            })
-        })
-        .collect::<Vec<_>>();
-    points.sort_by(|a, b| a.0.cmp(&b.0));
-    points
-}
-
-fn exercise_progress_chart(points: &[(String, f64)]) -> Html {
-    if points.is_empty() {
-        return html! { <p class="subtle">{"No logged sets yet for this exercise."}</p> };
-    }
-
-    let width = 360.0;
-    let height = 220.0;
-    let left = 34.0;
-    let right = 16.0;
-    let top = 18.0;
-    let bottom = 32.0;
-    let plot_width = width - left - right;
-    let plot_height = height - top - bottom;
-    let min_weight = points
-        .iter()
-        .map(|(_, weight)| *weight)
-        .fold(f64::INFINITY, f64::min);
-    let max_weight = points
-        .iter()
-        .map(|(_, weight)| *weight)
-        .fold(f64::NEG_INFINITY, f64::max);
-    let range = (max_weight - min_weight).max(1.0);
-    let count = points.len();
-
-    let coords: Vec<(f64, f64)> = points
-        .iter()
-        .enumerate()
-        .map(|(index, (_, weight))| {
-            let x = if count == 1 {
-                left + plot_width / 2.0
-            } else {
-                left + (plot_width * index as f64) / (count as f64 - 1.0)
-            };
-            let y = top + plot_height - (((*weight - min_weight) / range) * plot_height);
-            (x, y)
-        })
-        .collect();
-
-    let path = coords
-        .iter()
-        .enumerate()
-        .map(|(index, (x, y))| {
-            if index == 0 {
-                format!("M {x:.1} {y:.1}")
-            } else {
-                format!("L {x:.1} {y:.1}")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    let y_ticks = [min_weight, (min_weight + max_weight) / 2.0, max_weight];
-
-    html! {
-        <div class="progress-chart-card">
-            <svg class="progress-chart" viewBox="0 0 360 220" role="img" aria-label="Exercise progression chart">
-                <line x1={left.to_string()} y1={(top + plot_height).to_string()} x2={(width - right).to_string()} y2={(top + plot_height).to_string()} class="chart-axis" />
-                <line x1={left.to_string()} y1={top.to_string()} x2={left.to_string()} y2={(top + plot_height).to_string()} class="chart-axis" />
-                <path d={path} class="chart-line" />
-                {for coords.iter().enumerate().map(|(i, (x, y))| {
-                    let label = format!("{}", i + 1);
-                    html! {
-                        <g>
-                            <circle cx={x.to_string()} cy={y.to_string()} r="4.5" class="chart-point">
-                            </circle>
-                            <text x={x.to_string()} y={(height - 10.0).to_string()} text-anchor="middle" class="chart-x-label">{label}</text>
-                        </g>
-                    }
-                })}
-                {for y_ticks.iter().map(|tick| {
-                    let y = if range <= 0.0 {
-                        top + plot_height / 2.0
-                    } else {
-                        top + plot_height - (((*tick - min_weight) / range) * plot_height)
-                    };
-                    html! {
-                        <g>
-                            <line x1={left.to_string()} y1={y.to_string()} x2={(width - right).to_string()} y2={y.to_string()} class="chart-gridline" />
-                            <text x="10" y={(y + 4.0).to_string()} class="chart-y-label">{format!("{tick:.0}")}</text>
-                        </g>
-                    }
-                })}
-            </svg>
-        </div>
-    }
-}
-
-fn exercise_chart_view(
-    workouts: &[Workout],
-    exercise_options: &[String],
-    selected_exercise: UseStateHandle<String>,
-    logout: Callback<MouseEvent>,
-) -> Html {
-    let selected = (*selected_exercise).clone();
-    let points = exercise_progress_points(workouts, &selected);
-    let latest = points.last().map(|(_, weight)| *weight);
-    let previous = points.iter().rev().nth(1).map(|(_, weight)| *weight);
-    let delta = match (previous, latest) {
-        (Some(prev), Some(last)) => Some(last - prev),
-        _ => None,
-    };
-
-    html! {
-        <main class="app-shell">
-            <header class="topbar">
-                <div>
-                    <p class="eyebrow">{"TRAINING ANALYTICS"}</p>
-                    <h1>{"Progress"}</h1>
-                </div>
-                <button class="text-button" type="button" onclick={logout}>{"Logout"}</button>
-            </header>
-            <section class="hero-card">
-                <p class="eyebrow">{"EXERCISE CHART"}</p>
-                <p>{"Pick one lift and track how it changes over time."}</p>
-            </section>
-            <section class="workout-form">
-                <label class="field-label">
-                    {"Exercise"}
-                    <select
-                        data-testid="chart-exercise-select"
-                        value={selected.clone()}
-                        onchange={{
-                            let selected_exercise = selected_exercise.clone();
-                            Callback::from(move |e: Event| selected_exercise.set(e.target_unchecked_into::<HtmlSelectElement>().value()))
-                        }}
-                    >
-                        {for exercise_options.iter().map(|exercise| html!{ <option value={exercise.clone()}>{exercise.clone()}</option> })}
-                    </select>
-                </label>
-            </section>
-            <section class="chart-section">
-                <div class="chart-summary">
-                    <article class="chart-card">
-                        <p class="eyebrow">{"LATEST"}</p>
-                        <strong>{latest.map(|w| format!("{w:.1} lbs")).unwrap_or_else(|| "—".into())}</strong>
-                        <span>{"most recent logged weight"}</span>
-                    </article>
-                    <article class="chart-card">
-                        <p class="eyebrow">{"CHANGE"}</p>
-                        <strong>{delta.map(|d| format!("{:+.1} lbs", d)).unwrap_or_else(|| "—".into())}</strong>
-                        <span>{"since the previous session"}</span>
-                    </article>
-                </div>
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">{"PROGRESSION"}</p>
-                        <h2>{if selected.is_empty() { "No exercise selected" } else { selected.as_str() }}</h2>
-                    </div>
-                </div>
-                {exercise_progress_chart(&points)}
-                <p class="subtle chart-note">{"The x-axis is session order. Dates are used to sort the points, but the chart keeps them visually abstracted."}</p>
-            </section>
-        </main>
-    }
-}
-
 struct WorkoutEditorProps {
     date: UseStateHandle<String>,
     note: UseStateHandle<String>,
     name: UseStateHandle<String>,
     weight: UseStateHandle<String>,
     reps: UseStateHandle<String>,
+    set_reps: UseStateHandle<[u32; 3]>,
     details: UseStateHandle<String>,
     draft: UseStateHandle<Vec<Exercise>>,
     workouts: UseStateHandle<Vec<Workout>>,
@@ -678,6 +519,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         name,
         weight,
         reps,
+        set_reps,
         details,
         draft,
         workouts,
@@ -770,16 +612,34 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                         </span>
                     </label>
                     <label class="field-label">
-                        {"Reps per set"}
-                        <input
-                            data-testid="reps-input"
-                            value={(*reps).clone()}
-                            oninput={{
+                        {"Sets"}
+                        <div class="sets-grid">
+                            {for (0..3).map(|index| {
+                                let set_reps = set_reps.clone();
                                 let reps = reps.clone();
-                                Callback::from(move |e: InputEvent| reps.set(input_value(e)))
-                            }}
-                            placeholder="8, 8, 6"
-                        />
+                                let label = format!("Set {}", index + 1);
+                                let value = (*set_reps)[index];
+                                html! {
+                                    <button
+                                        class="set-chip"
+                                        type="button"
+                                        data-testid={format!("set-rep-{}", index + 1)}
+                                        onclick={Callback::from(move |_| {
+                                            let mut next = *set_reps;
+                                            if next[index] > 0 {
+                                                next[index] -= 1;
+                                            }
+                                            set_reps.set(next);
+                                            reps.set(format_set_reps(&next));
+                                        })}
+                                    >
+                                        <span>{label}</span>
+                                        <strong>{value}</strong>
+                                    </button>
+                                }
+                            })}
+                        </div>
+                        <p class="subtle sets-hint">{"Tap a set to count down from 10."}</p>
                     </label>
                     <label class="field-label">
                         {"Details"}
@@ -829,12 +689,11 @@ fn app() -> Html {
     let name = use_state(String::new);
     let new_exercise_name = use_state(String::new);
     let weight = use_state(String::new);
-    let reps = use_state(String::new);
+    let set_reps = use_state(default_set_reps);
+    let reps = use_state(|| format_set_reps(&default_set_reps()));
     let details = use_state(String::new);
     let draft = use_state(Vec::<Exercise>::new);
     let editing_id = use_state(|| None::<String>);
-    let active_tab = use_state(|| AppTab::Log);
-    let selected_chart_exercise = use_state(String::new);
 
     {
         let token = token.clone();
@@ -880,6 +739,7 @@ fn app() -> Html {
         let name = name.clone();
         let weight = weight.clone();
         let reps = reps.clone();
+        let set_reps = set_reps.clone();
         let details = details.clone();
         let new_exercise_name = new_exercise_name.clone();
         Callback::from(move |w: Workout| {
@@ -890,7 +750,8 @@ fn app() -> Html {
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
-            reps.set(String::new());
+            set_reps.set(default_set_reps());
+            reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
         })
     };
@@ -968,17 +829,13 @@ fn app() -> Html {
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
         let reps = reps.clone();
+        let set_reps = set_reps.clone();
         let details = details.clone();
         let draft = draft.clone();
         let status = status.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
         Callback::from(move |_| {
-            if reps.trim().is_empty() {
-                status.set("Enter reps first.".into());
-                return;
-            }
-
             let selected = (*name).clone();
             let weight_value = weight.parse().ok();
             let reps_value = (*reps).trim().to_string();
@@ -1004,6 +861,7 @@ fn app() -> Html {
                 let new_exercise_name = new_exercise_name.clone();
                 let weight_state = weight.clone();
                 let reps_state = reps.clone();
+                let set_reps_state = set_reps.clone();
                 let details_state = details.clone();
                 spawn_local(async move {
                     if let Some(t) = token {
@@ -1032,7 +890,8 @@ fn app() -> Html {
                         name.set(String::new());
                         new_exercise_name.set(String::new());
                         weight_state.set(String::new());
-                        reps_state.set(String::new());
+                        set_reps_state.set(default_set_reps());
+                        reps_state.set(format_set_reps(&default_set_reps()));
                         details_state.set(String::new());
                         status.set(String::new());
                     } else {
@@ -1059,7 +918,8 @@ fn app() -> Html {
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
-            reps.set(String::new());
+            set_reps.set(default_set_reps());
+            reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
         })
     };
@@ -1076,9 +936,8 @@ fn app() -> Html {
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
         let reps = reps.clone();
+        let set_reps = set_reps.clone();
         let details = details.clone();
-        let active_tab = active_tab.clone();
-        let selected_chart_exercise = selected_chart_exercise.clone();
         Callback::from(move |_| {
             clear_auth();
             token.set(None);
@@ -1092,10 +951,9 @@ fn app() -> Html {
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
-            reps.set(String::new());
+            set_reps.set(default_set_reps());
+            reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
-            active_tab.set(AppTab::Log);
-            selected_chart_exercise.set(String::new());
         })
     };
     let remove_draft = {
@@ -1115,6 +973,7 @@ fn app() -> Html {
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
         let reps = reps.clone();
+        let set_reps = set_reps.clone();
         let details = details.clone();
         let draft = draft.clone();
         let editing_id = editing_id.clone();
@@ -1124,7 +983,8 @@ fn app() -> Html {
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
-            reps.set(String::new());
+            set_reps.set(default_set_reps());
+            reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
             draft.set(Vec::new());
             editing_id.set(None);
@@ -1212,6 +1072,7 @@ fn app() -> Html {
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
         let reps = reps.clone();
+        let set_reps = set_reps.clone();
         let details = details.clone();
         let workouts = workouts.clone();
         Callback::from(move |e: Event| {
@@ -1220,15 +1081,19 @@ fn app() -> Html {
             if v == ADD_EXERCISE_VALUE {
                 new_exercise_name.set(String::new());
                 weight.set(String::new());
-                reps.set(String::new());
+                set_reps.set(default_set_reps());
+                reps.set(format_set_reps(&default_set_reps()));
                 details.set(String::new());
             } else if let Some(p) = previous(&workouts, &v) {
                 weight.set(p.weight.map(|x| x.to_string()).unwrap_or_default());
-                reps.set(p.reps);
+                let parsed = parse_set_reps(&p.reps);
+                set_reps.set(parsed);
+                reps.set(format_set_reps(&parsed));
                 details.set(p.details);
             } else {
                 weight.set(String::new());
-                reps.set(String::new());
+                set_reps.set(default_set_reps());
+                reps.set(format_set_reps(&default_set_reps()));
                 details.set(String::new());
             }
         })
@@ -1251,16 +1116,10 @@ fn app() -> Html {
         let draft = draft.clone();
         let editing_id = editing_id.clone();
         let exercise_options = exercise_options.clone();
-        let on_log_tab = matches!(*active_tab, AppTab::Log);
         use_effect_with(
-            (
-                exercise_options.len(),
-                draft.len(),
-                editing_id.is_some(),
-                on_log_tab,
-            ),
+            (exercise_options.len(), draft.len(), editing_id.is_some()),
             move |_| {
-                if on_log_tab && editing_id.is_none() && draft.is_empty() && name.is_empty() {
+                if editing_id.is_none() && draft.is_empty() && name.is_empty() {
                     if let Some(first) = exercise_options.first() {
                         name.set(first.clone());
                     } else {
@@ -1271,76 +1130,30 @@ fn app() -> Html {
             },
         );
     }
-    {
-        let selected_chart_exercise = selected_chart_exercise.clone();
-        let exercise_options = exercise_options.clone();
-        let on_charts_tab = matches!(*active_tab, AppTab::Charts);
-        use_effect_with((exercise_options.len(), on_charts_tab), move |_| {
-            if on_charts_tab {
-                let current = (*selected_chart_exercise).clone();
-                if current.is_empty()
-                    || !exercise_options
-                        .iter()
-                        .any(|option| option.eq_ignore_ascii_case(&current))
-                {
-                    if let Some(first) = exercise_options.first() {
-                        selected_chart_exercise.set(first.clone());
-                    }
-                }
-            }
-            || ()
-        });
-    }
-    let main_view = match *active_tab {
-        AppTab::Log => workout_editor_view(WorkoutEditorProps {
-            date,
-            note,
-            name,
-            weight,
-            reps,
-            details,
-            draft,
-            workouts,
-            editing_id,
-            status,
-            new_exercise_name,
-            on_name,
-            add,
-            remove_draft,
-            save,
-            logout: logout.clone(),
-            load_workout,
-            delete_selected,
-            exercise_options,
-        }),
-        AppTab::Charts => exercise_chart_view(
-            &workouts,
-            &exercise_options,
-            selected_chart_exercise.clone(),
-            logout.clone(),
-        ),
-    };
-    let switch_to_log = {
-        let active_tab = active_tab.clone();
-        Callback::from(move |_| active_tab.set(AppTab::Log))
-    };
-    let switch_to_charts = {
-        let active_tab = active_tab.clone();
-        Callback::from(move |_| active_tab.set(AppTab::Charts))
-    };
     html! {
         <>
-            {main_view}
-            <nav class="bottom-nav">
-                <button class={classes!("nav-item", matches!(*active_tab, AppTab::Log).then_some("active"))} type="button" onclick={switch_to_log}>
-                    <span>{"✎"}</span>
-                    {"Log"}
-                </button>
-                <button class={classes!("nav-item", matches!(*active_tab, AppTab::Charts).then_some("active"))} type="button" onclick={switch_to_charts}>
-                    <span>{"▥"}</span>
-                    {"Charts"}
-                </button>
-            </nav>
+            {workout_editor_view(WorkoutEditorProps {
+                date,
+                note,
+                name,
+        weight,
+        reps,
+        set_reps,
+        details,
+                draft,
+                workouts,
+                editing_id,
+                status,
+                new_exercise_name,
+                on_name,
+                add,
+                remove_draft,
+                save,
+                logout,
+                load_workout,
+                delete_selected,
+                exercise_options,
+            })}
         </>
     }
 }
