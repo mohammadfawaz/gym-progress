@@ -122,10 +122,12 @@ test('can add an existing exercise and a new exercise', async ({ page }) => {
   await expect(set1).toContainText('10');
   await set1.click();
   await set1.click();
+  await expect(set1).toContainText('8');
   await addButton.click();
 
   await expect(page.locator('.workout-form .exercise-entry')).toContainText('Cable Chest Press');
   await expect(page.locator('.workout-form .exercise-entry')).toContainText('8, 10, 10');
+  await expect(set1).toContainText('10');
 
   await select.selectOption('__add_exercise__');
   await expect(page.getByTestId('new-exercise-name')).toBeVisible();
@@ -133,6 +135,16 @@ test('can add an existing exercise and a new exercise', async ({ page }) => {
   await weight.fill('135');
   await expect(set2).toContainText('10');
   await set2.click();
+  await set2.click();
+  await set2.click();
+  await set2.click();
+  await set2.click();
+  await set2.click();
+  await set2.click();
+  await set2.click();
+  await set2.click();
+  await set2.click();
+  await expect(set2).toContainText('10');
   await addButton.click();
 
   await expect(page.locator('.workout-form .exercise-entry')).toContainText('Romanian Deadlift');
