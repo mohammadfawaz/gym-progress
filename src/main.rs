@@ -620,14 +620,12 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                                 let value = (*set_reps)[index];
                                 html! {
                                     <button
-                                        class="set-chip"
+                                        class={classes!("set-chip", (value < 10).then_some("set-chip-dim"))}
                                         type="button"
                                         data-testid={format!("set-rep-{}", index + 1)}
                                         onclick={Callback::from(move |_| {
                                             let mut next = *set_reps;
-                                            if next[index] > 0 {
-                                                next[index] -= 1;
-                                            }
+                                            next[index] = if next[index] == 0 { 10 } else { next[index] - 1 };
                                             set_reps.set(next);
                                             reps.set(format_set_reps(&next));
                                         })}

@@ -323,6 +323,12 @@ h2 {
     inset 0 1px 0 #ff9c92,
     0 8px 18px #0005;
 }
+.set-chip-dim {
+  background: linear-gradient(180deg, #d83c2d, #8f171f);
+  box-shadow:
+    inset 0 1px 0 #ff8c82,
+    0 6px 14px #0004;
+}
 .sets-hint {
   margin: -2px 0 0;
 }
