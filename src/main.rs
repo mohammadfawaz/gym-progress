@@ -1064,6 +1064,25 @@ fn app() -> Html {
         options.sort();
         options
     };
+    {
+        let name = name.clone();
+        let draft = draft.clone();
+        let editing_id = editing_id.clone();
+        let exercise_options = exercise_options.clone();
+        use_effect_with(
+            (exercise_options.len(), draft.len(), editing_id.is_some()),
+            move |_| {
+                if editing_id.is_none() && draft.is_empty() && name.is_empty() {
+                    if let Some(first) = exercise_options.first() {
+                        name.set(first.clone());
+                    } else {
+                        name.set(ADD_EXERCISE_VALUE.into());
+                    }
+                }
+                || ()
+            },
+        );
+    }
     workout_editor_view(WorkoutEditorProps {
         date,
         note,
