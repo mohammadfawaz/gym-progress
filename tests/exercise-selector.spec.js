@@ -136,3 +136,29 @@ test('can add an existing exercise and a new exercise', async ({ page }) => {
     canonical_name: 'Romanian Deadlift',
   }));
 });
+
+test('can switch to the charts tab', async ({ page }) => {
+  await mockSupabase(page, {
+    workouts: [
+      {
+        id: 'seed-1',
+        date: '2026-07-30',
+        note: '',
+        exercises: [
+          {
+            name: 'Bench Press',
+            weight: 125,
+            unit: 'lb',
+            reps: '8, 8, 8',
+            details: '',
+          },
+        ],
+      },
+    ],
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Charts' }).click();
+  await expect(page.getByRole('heading', { name: 'Charts' })).toBeVisible();
+  await expect(page.locator('.chart-card').first()).toBeVisible();
+});

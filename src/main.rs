@@ -13,6 +13,12 @@ const AUTH_TOKEN_KEY: &str = "lift-log-auth-token";
 const AUTH_UID_KEY: &str = "lift-log-auth-uid";
 const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AppTab {
+    Log,
+    Charts,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Exercise {
     name: String,
@@ -470,6 +476,136 @@ fn history_view(
     }
 }
 
+fn parse_reps_total(reps: &str) -> f64 {
+    reps.split(',')
+        .filter_map(|part| part.trim().parse::<f64>().ok())
+        .sum()
+}
+
+fn workout_volume(workout: &Workout) -> f64 {
+    workout
+        .exercises
+        .iter()
+        .map(|exercise| exercise.weight.unwrap_or(0.0) * parse_reps_total(&exercise.reps))
+        .sum()
+}
+
+fn top_exercises(workouts: &[Workout]) -> Vec<(String, usize)> {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for workout in workouts {
+        for exercise in &workout.exercises {
+            *counts.entry(exercise.name.clone()).or_insert(0) += 1;
+        }
+    }
+    let mut items: Vec<_> = counts.into_iter().collect();
+    items.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    items
+}
+
+fn chart_bar_row(label: &str, value_label: String, pct: f64) -> Html {
+    let pct = pct.clamp(0.0, 100.0);
+    html! {
+        <div class="chart-row">
+            <div class="chart-row-head">
+                <span>{label}</span>
+                <span class="chart-row-value">{value_label}</span>
+            </div>
+            <div class="chart-track" aria-hidden="true">
+                <div class="chart-fill" style={format!("width: {pct:.0}%")}></div>
+            </div>
+        </div>
+    }
+}
+
+fn charts_view(workouts: &[Workout], logout: Callback<MouseEvent>) -> Html {
+    let ordered: Vec<_> = workouts.iter().collect();
+    let volumes: Vec<_> = ordered
+        .iter()
+        .map(|w| (w.date.clone(), workout_volume(w)))
+        .collect();
+    let max_volume = volumes.iter().map(|(_, v)| *v).fold(0.0, f64::max);
+    let top = top_exercises(workouts);
+    let total_volume: f64 = volumes.iter().map(|(_, v)| *v).sum();
+    let top_exercise = top
+        .first()
+        .map(|(name, count)| format!("{name} · {count} sessions"))
+        .unwrap_or_else(|| "No exercise data yet".into());
+
+    html! {
+        <main class="app-shell">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">{"TRAINING ANALYTICS"}</p>
+                    <h1>{"Charts"}</h1>
+                </div>
+                <button class="text-button" type="button" onclick={logout}>{"Logout"}</button>
+            </header>
+            <section class="hero-card">
+                <p class="eyebrow">{"OVERVIEW"}</p>
+                <p>{"A quick read on your workload and the exercises you keep coming back to."}</p>
+            </section>
+            <section class="chart-grid">
+                <article class="chart-card">
+                    <p class="eyebrow">{"TOTAL VOLUME"}</p>
+                    <strong>{format!("{total_volume:.0}")}</strong>
+                    <span>{"lbs × reps across all logged workouts"}</span>
+                </article>
+                <article class="chart-card">
+                    <p class="eyebrow">{"WORKOUTS"}</p>
+                    <strong>{workouts.len()}</strong>
+                    <span>{"sessions in history"}</span>
+                </article>
+                <article class="chart-card">
+                    <p class="eyebrow">{"TOP EXERCISE"}</p>
+                    <strong>{top_exercise}</strong>
+                    <span>{"most frequently logged lift"}</span>
+                </article>
+            </section>
+            <section class="chart-section">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">{"WORKOUT VOLUME"}</p>
+                        <h2>{"Per session"}</h2>
+                    </div>
+                </div>
+                <div class="chart-list">
+                    {if volumes.is_empty() {
+                        html! { <p class="subtle">{"No workouts to chart yet."}</p> }
+                    } else {
+                        html! {
+                            for volumes.iter().map(|(date, volume)| {
+                                let pct = if max_volume > 0.0 { (volume / max_volume) * 100.0 } else { 0.0 };
+                                chart_bar_row(date, format!("{volume:.0}"), pct)
+                            })
+                        }
+                    }}
+                </div>
+            </section>
+            <section class="chart-section">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">{"MOST USED"}</p>
+                        <h2>{"Exercises"}</h2>
+                    </div>
+                </div>
+                <div class="chart-list">
+                    {if top.is_empty() {
+                        html! { <p class="subtle">{"No exercise history yet."}</p> }
+                    } else {
+                        let max_count = top.first().map(|(_, count)| *count as f64).unwrap_or(0.0);
+                        html! {
+                            for top.iter().take(8).map(|(name, count)| {
+                                let pct = if max_count > 0.0 { (*count as f64 / max_count) * 100.0 } else { 0.0 };
+                                chart_bar_row(name, format!("{count} sessions"), pct)
+                            })
+                        }
+                    }}
+                </div>
+            </section>
+        </main>
+    }
+}
+
 struct WorkoutEditorProps {
     date: UseStateHandle<String>,
     note: UseStateHandle<String>,
@@ -654,6 +790,7 @@ fn app() -> Html {
     let details = use_state(String::new);
     let draft = use_state(Vec::<Exercise>::new);
     let editing_id = use_state(|| None::<String>);
+    let active_tab = use_state(|| AppTab::Log);
 
     {
         let token = token.clone();
@@ -896,6 +1033,7 @@ fn app() -> Html {
         let weight = weight.clone();
         let reps = reps.clone();
         let details = details.clone();
+        let active_tab = active_tab.clone();
         Callback::from(move |_| {
             clear_auth();
             token.set(None);
@@ -911,6 +1049,7 @@ fn app() -> Html {
             weight.set(String::new());
             reps.set(String::new());
             details.set(String::new());
+            active_tab.set(AppTab::Log);
         })
     };
     let remove_draft = {
@@ -1066,10 +1205,16 @@ fn app() -> Html {
         let draft = draft.clone();
         let editing_id = editing_id.clone();
         let exercise_options = exercise_options.clone();
+        let on_log_tab = matches!(*active_tab, AppTab::Log);
         use_effect_with(
-            (exercise_options.len(), draft.len(), editing_id.is_some()),
+            (
+                exercise_options.len(),
+                draft.len(),
+                editing_id.is_some(),
+                on_log_tab,
+            ),
             move |_| {
-                if editing_id.is_none() && draft.is_empty() && name.is_empty() {
+                if on_log_tab && editing_id.is_none() && draft.is_empty() && name.is_empty() {
                     if let Some(first) = exercise_options.first() {
                         name.set(first.clone());
                     } else {
@@ -1080,27 +1225,53 @@ fn app() -> Html {
             },
         );
     }
-    workout_editor_view(WorkoutEditorProps {
-        date,
-        note,
-        name,
-        weight,
-        reps,
-        details,
-        draft,
-        workouts,
-        editing_id,
-        status,
-        new_exercise_name,
-        on_name,
-        add,
-        remove_draft,
-        save,
-        logout,
-        load_workout,
-        delete_selected,
-        exercise_options,
-    })
+    let main_view = match *active_tab {
+        AppTab::Log => workout_editor_view(WorkoutEditorProps {
+            date,
+            note,
+            name,
+            weight,
+            reps,
+            details,
+            draft,
+            workouts,
+            editing_id,
+            status,
+            new_exercise_name,
+            on_name,
+            add,
+            remove_draft,
+            save,
+            logout: logout.clone(),
+            load_workout,
+            delete_selected,
+            exercise_options,
+        }),
+        AppTab::Charts => charts_view(&workouts, logout.clone()),
+    };
+    let switch_to_log = {
+        let active_tab = active_tab.clone();
+        Callback::from(move |_| active_tab.set(AppTab::Log))
+    };
+    let switch_to_charts = {
+        let active_tab = active_tab.clone();
+        Callback::from(move |_| active_tab.set(AppTab::Charts))
+    };
+    html! {
+        <>
+            {main_view}
+            <nav class="bottom-nav">
+                <button class={classes!("nav-item", matches!(*active_tab, AppTab::Log).then_some("active"))} type="button" onclick={switch_to_log}>
+                    <span>{"✎"}</span>
+                    {"Log"}
+                </button>
+                <button class={classes!("nav-item", matches!(*active_tab, AppTab::Charts).then_some("active"))} type="button" onclick={switch_to_charts}>
+                    <span>{"▥"}</span>
+                    {"Charts"}
+                </button>
+            </nav>
+        </>
+    }
 }
 fn main() {
     yew::Renderer::<App>::new().render();
