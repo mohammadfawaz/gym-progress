@@ -553,12 +553,10 @@ fn exercise_progress_chart(points: &[(String, f64)]) -> Html {
                 <line x1={left.to_string()} y1={top.to_string()} x2={left.to_string()} y2={(top + plot_height).to_string()} class="chart-axis" />
                 <path d={path} class="chart-line" />
                 {for coords.iter().enumerate().map(|(i, (x, y))| {
-                    let label = format!("Session {}", i + 1);
-                    let title = format!("{} · {:.1} lbs", points[i].0, points[i].1);
+                    let label = format!("{}", i + 1);
                     html! {
                         <g>
                             <circle cx={x.to_string()} cy={y.to_string()} r="4.5" class="chart-point">
-                                <title>{title}</title>
                             </circle>
                             <text x={x.to_string()} y={(height - 10.0).to_string()} text-anchor="middle" class="chart-x-label">{label}</text>
                         </g>
