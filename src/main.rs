@@ -497,6 +497,7 @@ struct WorkoutEditorProps {
     reps: UseStateHandle<String>,
     set_reps: UseStateHandle<[u32; 3]>,
     details: UseStateHandle<String>,
+    show_new_exercise: UseStateHandle<bool>,
     draft: UseStateHandle<Vec<Exercise>>,
     workouts: UseStateHandle<Vec<Workout>>,
     editing_id: UseStateHandle<Option<String>>,
@@ -521,6 +522,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         reps,
         set_reps,
         details,
+        show_new_exercise,
         draft,
         workouts,
         editing_id,
@@ -579,7 +581,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                             <option value={ADD_EXERCISE_VALUE}>{"New Exercise"}</option>
                         </select>
                     </label>
-                    {if *name == ADD_EXERCISE_VALUE {
+                    {if *show_new_exercise {
                         html! {
                             <label class="field-label">
                                 {"New exercise name"}
@@ -688,6 +690,7 @@ fn app() -> Html {
     let set_reps = use_state(default_set_reps);
     let reps = use_state(|| format_set_reps(&default_set_reps()));
     let details = use_state(String::new);
+    let show_new_exercise = use_state(|| false);
     let draft = use_state(Vec::<Exercise>::new);
     let editing_id = use_state(|| None::<String>);
 
@@ -736,6 +739,7 @@ fn app() -> Html {
         let weight = weight.clone();
         let reps = reps.clone();
         let set_reps = set_reps.clone();
+        let show_new_exercise = show_new_exercise.clone();
         let details = details.clone();
         let new_exercise_name = new_exercise_name.clone();
         Callback::from(move |w: Workout| {
@@ -749,6 +753,7 @@ fn app() -> Html {
             set_reps.set(default_set_reps());
             reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
+            show_new_exercise.set(false);
         })
     };
     let submit_auth = {
@@ -827,6 +832,7 @@ fn app() -> Html {
         let reps = reps.clone();
         let set_reps = set_reps.clone();
         let details = details.clone();
+        let show_new_exercise = show_new_exercise.clone();
         let draft = draft.clone();
         let status = status.clone();
         let exercise_catalog = exercise_catalog.clone();
@@ -860,6 +866,7 @@ fn app() -> Html {
                 let reps_state = reps.clone();
                 let set_reps_state = set_reps.clone();
                 let details_state = details.clone();
+                let show_new_exercise_state = show_new_exercise.clone();
                 spawn_local(async move {
                     if let Some(t) = token {
                         if !already_exists {
@@ -890,6 +897,7 @@ fn app() -> Html {
                         set_reps_state.set(default_set_reps());
                         reps_state.set(format_set_reps(&default_set_reps()));
                         details_state.set(String::new());
+                        show_new_exercise_state.set(false);
                         status.set(String::new());
                     } else {
                         status.set("Sign in first.".into());
@@ -919,6 +927,7 @@ fn app() -> Html {
             set_reps.set(default_set_reps());
             reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
+            show_new_exercise.set(false);
         })
     };
     let logout = {
@@ -936,6 +945,7 @@ fn app() -> Html {
         let reps = reps.clone();
         let set_reps = set_reps.clone();
         let details = details.clone();
+        let show_new_exercise = show_new_exercise.clone();
         Callback::from(move |_| {
             clear_auth();
             token.set(None);
@@ -952,6 +962,7 @@ fn app() -> Html {
             set_reps.set(default_set_reps());
             reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
+            show_new_exercise.set(false);
         })
     };
     let remove_draft = {
@@ -973,6 +984,7 @@ fn app() -> Html {
         let reps = reps.clone();
         let set_reps = set_reps.clone();
         let details = details.clone();
+        let show_new_exercise = show_new_exercise.clone();
         let draft = draft.clone();
         let editing_id = editing_id.clone();
         Callback::from(move |_: ()| {
@@ -984,6 +996,7 @@ fn app() -> Html {
             set_reps.set(default_set_reps());
             reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
+            show_new_exercise.set(false);
             draft.set(Vec::new());
             editing_id.set(None);
         })
@@ -1071,24 +1084,28 @@ fn app() -> Html {
         let weight = weight.clone();
         let reps = reps.clone();
         let set_reps = set_reps.clone();
+        let show_new_exercise = show_new_exercise.clone();
         let details = details.clone();
         let workouts = workouts.clone();
         Callback::from(move |e: Event| {
             let v = e.target_unchecked_into::<HtmlSelectElement>().value();
             name.set(v.clone());
             if v == ADD_EXERCISE_VALUE {
+                show_new_exercise.set(true);
                 new_exercise_name.set(String::new());
                 weight.set(String::new());
                 set_reps.set(default_set_reps());
                 reps.set(format_set_reps(&default_set_reps()));
                 details.set(String::new());
             } else if let Some(p) = previous(&workouts, &v) {
+                show_new_exercise.set(false);
                 weight.set(p.weight.map(|x| x.to_string()).unwrap_or_default());
                 let parsed = parse_set_reps(&p.reps);
                 set_reps.set(parsed);
                 reps.set(format_set_reps(&parsed));
                 details.set(p.details);
             } else {
+                show_new_exercise.set(false);
                 weight.set(String::new());
                 set_reps.set(default_set_reps());
                 reps.set(format_set_reps(&default_set_reps()));
@@ -1136,8 +1153,9 @@ fn app() -> Html {
                 name,
         weight,
         reps,
-        set_reps,
-        details,
+                set_reps,
+                details,
+                show_new_exercise,
                 draft,
                 workouts,
                 editing_id,
