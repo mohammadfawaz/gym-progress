@@ -553,7 +553,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                 <div class="exercise-stack">
                     <label class="field-label">
                         {"Exercise"}
-                        <select value={(*name).clone()} onchange={on_name}>
+                        <select data-testid="exercise-select" value={(*name).clone()} onchange={on_name}>
                             {for exercise_options.iter().map(|exercise| html!{ <option value={exercise.clone()}>{exercise.clone()}</option> })}
                             <option value={ADD_EXERCISE_VALUE}>{"New Exercise"}</option>
                         </select>
@@ -563,6 +563,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                             <label class="field-label">
                                 {"New exercise name"}
                                 <input
+                                    data-testid="new-exercise-name"
                                     value={(*new_exercise_name).clone()}
                                     oninput={{
                                         let new_exercise_name = new_exercise_name.clone();
@@ -579,6 +580,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                         {"Weight"}
                         <span class="weight-row">
                             <input
+                                data-testid="weight-input"
                                 value={(*weight).clone()}
                                 oninput={{
                                     let weight = weight.clone();
@@ -591,6 +593,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                     <label class="field-label">
                         {"Reps per set"}
                         <input
+                            data-testid="reps-input"
                             value={(*reps).clone()}
                             oninput={{
                                 let reps = reps.clone();
@@ -602,6 +605,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                     <label class="field-label">
                         {"Details"}
                         <input
+                            data-testid="details-input"
                             value={(*details).clone()}
                             oninput={{
                                 let details = details.clone();
@@ -609,7 +613,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                             }}
                         />
                     </label>
-                    <button class="add-button" type="button" onclick={add}>{"+ Add exercise"}</button>
+                    <button class="add-button" data-testid="add-exercise-button" type="button" onclick={add}>{"+ Add exercise"}</button>
                 </div>
                 {draft_entries(&draft, remove_draft)}
                 <button class="primary-button save-button" type="button" onclick={save}>
@@ -863,13 +867,6 @@ fn app() -> Html {
             }
 
             let canonical_name = canonicalize_name(&selected, &exercise_aliases);
-            if !exercise_catalog
-                .iter()
-                .any(|item| item.eq_ignore_ascii_case(&canonical_name))
-            {
-                status.set("Choose an exercise from the database list.".into());
-                return;
-            }
             let mut next = (*draft).clone();
             next.push(Exercise {
                 name: canonical_name,

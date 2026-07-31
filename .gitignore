@@ -1,5 +1,8 @@
 dist/
 target/
+node_modules/
+playwright-report/
+test-results/
 .trunk/out/
 .trunk/logs/
 .trunk/actions/
