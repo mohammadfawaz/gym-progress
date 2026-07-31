@@ -491,7 +491,6 @@ fn history_view(
 
 struct WorkoutEditorProps {
     date: UseStateHandle<String>,
-    note: UseStateHandle<String>,
     name: UseStateHandle<String>,
     weight: UseStateHandle<String>,
     reps: UseStateHandle<String>,
@@ -511,12 +510,12 @@ struct WorkoutEditorProps {
     load_workout: Callback<Workout>,
     delete_selected: Callback<String>,
     exercise_options: Vec<String>,
+    active_tab: UseStateHandle<String>,
 }
 
 fn workout_editor_view(props: WorkoutEditorProps) -> Html {
     let WorkoutEditorProps {
         date,
-        note,
         name,
         weight,
         reps,
@@ -536,6 +535,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         load_workout,
         delete_selected,
         exercise_options,
+        active_tab,
     } = props;
 
     html! {
@@ -547,125 +547,140 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                 </div>
                 <button class="text-button" type="button" onclick={logout}>{"Logout"}</button>
             </header>
-            <section class="hero-card">
-                <p class="eyebrow">{"NEW WORKOUT"}</p>
-                <p>{"Your previous numbers prefill as targets."}</p>
-            </section>
-            <section class="workout-form">
-                <label class="field-label">
-                    {"Date"}
-                    <input
-                        type="date"
-                        value={(*date).clone()}
-                        oninput={{
-                            let date = date.clone();
-                            Callback::from(move |e: InputEvent| date.set(input_value(e)))
-                        }}
-                    />
-                </label>
-                <label class="field-label">
-                    {"Session note"}
-                    <input
-                        value={(*note).clone()}
-                        oninput={{
-                            let note = note.clone();
-                            Callback::from(move |e: InputEvent| note.set(input_value(e)))
-                        }}
-                    />
-                </label>
-                <div class="exercise-stack">
-                    <label class="field-label">
-                        {"Exercise"}
-                        <select data-testid="exercise-select" value={(*name).clone()} onchange={on_name}>
-                            {for exercise_options.iter().map(|exercise| html!{ <option value={exercise.clone()}>{exercise.clone()}</option> })}
-                            <option value={ADD_EXERCISE_VALUE}>{"New Exercise"}</option>
-                        </select>
-                    </label>
-                    {if *show_new_exercise {
-                        html! {
-                            <label class="field-label">
-                                {"New exercise name"}
-                                <input
-                                    data-testid="new-exercise-name"
-                                    value={(*new_exercise_name).clone()}
-                                    oninput={{
-                                        let new_exercise_name = new_exercise_name.clone();
-                                        Callback::from(move |e: InputEvent| new_exercise_name.set(input_value(e)))
-                                    }}
-                                    placeholder="Romanian deadlift"
-                                />
-                            </label>
-                        }
-                    } else {
-                        html! {}
+            <div class="tab-bar" role="tablist" aria-label="Lift Log sections">
+                <button
+                    class={classes!("tab-button", (*active_tab == "workout").then_some("active"))}
+                    type="button"
+                    onclick={{
+                        let active_tab = active_tab.clone();
+                        Callback::from(move |_| active_tab.set("workout".into()))
                     }}
+                >
+                    {"Workout"}
+                </button>
+                <button
+                    class={classes!("tab-button", (*active_tab == "history").then_some("active"))}
+                    type="button"
+                    onclick={{
+                        let active_tab = active_tab.clone();
+                        Callback::from(move |_| active_tab.set("history".into()))
+                    }}
+                >
+                    {"History"}
+                </button>
+            </div>
+            <section class={classes!("view", (*active_tab == "workout").then_some("active"))}>
+                <section class="hero-card">
+                    <p class="eyebrow">{"NEW WORKOUT"}</p>
+                </section>
+                <section class="workout-form">
                     <label class="field-label">
-                        {"Weight"}
-                        <span class="weight-row">
-                            <input
-                                data-testid="weight-input"
-                                value={(*weight).clone()}
-                                oninput={{
-                                    let weight = weight.clone();
-                                    Callback::from(move |e: InputEvent| weight.set(input_value(e)))
-                                }}
-                            />
-                            <span class="weight-unit">{"lbs"}</span>
-                        </span>
-                    </label>
-                    <label class="field-label">
-                        {"Sets"}
-                        <div class="sets-grid">
-                            {for (0..3).map(|index| {
-                                let set_reps = set_reps.clone();
-                                let reps = reps.clone();
-                                let value = (*set_reps)[index];
-                                html! {
-                                    <button
-                                        class={classes!("set-chip", (value < 10).then_some("set-chip-dim"))}
-                                        type="button"
-                                        data-testid={format!("set-rep-{}", index + 1)}
-                                        onclick={Callback::from(move |_| {
-                                            let mut next = *set_reps;
-                                            next[index] = if next[index] == 0 { 10 } else { next[index] - 1 };
-                                            set_reps.set(next);
-                                            reps.set(format_set_reps(&next));
-                                        })}
-                                    >
-                                        {value}
-                                    </button>
-                                }
-                            })}
-                        </div>
-                        <p class="subtle sets-hint">{"Tap a set to count down from 10."}</p>
-                    </label>
-                    <label class="field-label">
-                        {"Details"}
+                        {"Date"}
                         <input
-                            data-testid="details-input"
-                            value={(*details).clone()}
+                            type="date"
+                            value={(*date).clone()}
                             oninput={{
-                                let details = details.clone();
-                                Callback::from(move |e: InputEvent| details.set(input_value(e)))
+                                let date = date.clone();
+                                Callback::from(move |e: InputEvent| date.set(input_value(e)))
                             }}
                         />
                     </label>
-                    <button class="add-button" data-testid="add-exercise-button" type="button" onclick={add}>{"+ Add exercise"}</button>
-                </div>
-                {draft_entries(&draft, remove_draft)}
-                <button class="primary-button save-button" type="button" onclick={save}>
-                    {if editing_id.is_some() { "Update workout" } else { "Save workout" }}
-                    <span>{"✓"}</span>
-                </button>
-                <p class="subtle">{(*status).clone()}</p>
+                    <div class="exercise-stack">
+                        <label class="field-label">
+                            {"Exercise"}
+                            <select data-testid="exercise-select" value={(*name).clone()} onchange={on_name}>
+                                {for exercise_options.iter().map(|exercise| html!{ <option value={exercise.clone()}>{exercise.clone()}</option> })}
+                                <option value={ADD_EXERCISE_VALUE}>{"New Exercise"}</option>
+                            </select>
+                        </label>
+                        {if *show_new_exercise {
+                            html! {
+                                <label class="field-label">
+                                    {"New exercise name"}
+                                    <input
+                                        data-testid="new-exercise-name"
+                                        value={(*new_exercise_name).clone()}
+                                        oninput={{
+                                            let new_exercise_name = new_exercise_name.clone();
+                                            Callback::from(move |e: InputEvent| new_exercise_name.set(input_value(e)))
+                                        }}
+                                        placeholder="Romanian deadlift"
+                                    />
+                                </label>
+                            }
+                        } else {
+                            html! {}
+                        }}
+                        <label class="field-label">
+                            {"Weight"}
+                            <span class="weight-row">
+                                <input
+                                    data-testid="weight-input"
+                                    value={(*weight).clone()}
+                                    oninput={{
+                                        let weight = weight.clone();
+                                        Callback::from(move |e: InputEvent| weight.set(input_value(e)))
+                                    }}
+                                />
+                                <span class="weight-unit">{"lbs"}</span>
+                            </span>
+                        </label>
+                        <label class="field-label">
+                            {"Sets"}
+                            <div class="sets-grid">
+                                {for (0..3).map(|index| {
+                                    let set_reps = set_reps.clone();
+                                    let reps = reps.clone();
+                                    let value = (*set_reps)[index];
+                                    html! {
+                                        <button
+                                            class={classes!("set-chip", (value < 10).then_some("set-chip-dim"))}
+                                            type="button"
+                                            data-testid={format!("set-rep-{}", index + 1)}
+                                            onclick={Callback::from(move |_| {
+                                                let mut next = *set_reps;
+                                                next[index] = if next[index] == 0 { 10 } else { next[index] - 1 };
+                                                set_reps.set(next);
+                                                reps.set(format_set_reps(&next));
+                                            })}
+                                        >
+                                            {value}
+                                        </button>
+                                    }
+                                })}
+                            </div>
+                            <p class="subtle sets-hint">{"Tap a set to count down from 10."}</p>
+                        </label>
+                        <label class="field-label">
+                            {"Details"}
+                            <input
+                                data-testid="details-input"
+                                value={(*details).clone()}
+                                oninput={{
+                                    let details = details.clone();
+                                    Callback::from(move |e: InputEvent| details.set(input_value(e)))
+                                }}
+                            />
+                        </label>
+                        <button class="add-button" data-testid="add-exercise-button" type="button" onclick={add}>{"+ Add Exercise"}</button>
+                    </div>
+                    {draft_entries(&draft, remove_draft)}
+                    <button class="primary-button save-button" type="button" onclick={save}>
+                        {if editing_id.is_some() { "Update workout" } else { "Save workout" }}
+                        <span>{"✓"}</span>
+                    </button>
+                    <p class="subtle">{(*status).clone()}</p>
+                </section>
             </section>
-            <div class="section-heading">
-                <div>
-                    <p class="eyebrow">{"YOUR LOG"}</p>
-                    <h2>{"Workout history"}</h2>
+            <section class={classes!("view", (*active_tab == "history").then_some("active"))}>
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">{"YOUR LOG"}</p>
+                        <h2>{"Workout history"}</h2>
+                    </div>
                 </div>
-            </div>
-            {history_view(&workouts, load_workout, delete_selected)}
+                {history_view(&workouts, load_workout, delete_selected)}
+            </section>
         </main>
     }
 }
@@ -682,6 +697,7 @@ fn app() -> Html {
     let email = use_state(String::new);
     let password = use_state(String::new);
     let signup = use_state(|| false);
+    let active_tab = use_state(|| "workout".to_string());
     let date = use_state(|| "2026-07-30".to_string());
     let note = use_state(String::new);
     let name = use_state(String::new);
@@ -742,6 +758,7 @@ fn app() -> Html {
         let show_new_exercise = show_new_exercise.clone();
         let details = details.clone();
         let new_exercise_name = new_exercise_name.clone();
+        let active_tab = active_tab.clone();
         Callback::from(move |w: Workout| {
             date.set(w.date.clone());
             note.set(w.note.clone());
@@ -754,6 +771,7 @@ fn app() -> Html {
             reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
             show_new_exercise.set(false);
+            active_tab.set("workout".into());
         })
     };
     let submit_auth = {
@@ -843,7 +861,7 @@ fn app() -> Html {
             let reps_value = (*reps).trim().to_string();
             let details_value = (*details).trim().to_string();
 
-            if selected == ADD_EXERCISE_VALUE {
+            if *show_new_exercise || selected == ADD_EXERCISE_VALUE {
                 let canonical = title_case_name(new_exercise_name.trim());
                 if canonical.is_empty() {
                     status.set("Enter a new exercise name first.".into());
@@ -896,7 +914,7 @@ fn app() -> Html {
                         set_reps_state.set(default_set_reps());
                         reps_state.set(format_set_reps(&default_set_reps()));
                         details_state.set(String::new());
-                        show_new_exercise_state.set(false);
+                        show_new_exercise_state.set(true);
                         status.set(String::new());
                     } else {
                         status.set("Sign in first.".into());
@@ -985,6 +1003,7 @@ fn app() -> Html {
         let show_new_exercise = show_new_exercise.clone();
         let draft = draft.clone();
         let editing_id = editing_id.clone();
+        let active_tab = active_tab.clone();
         Callback::from(move |_: ()| {
             date.set(today_string());
             note.set(String::new());
@@ -997,6 +1016,7 @@ fn app() -> Html {
             show_new_exercise.set(false);
             draft.set(Vec::new());
             editing_id.set(None);
+            active_tab.set("workout".into());
         })
     };
     let save = {
@@ -1136,7 +1156,7 @@ fn app() -> Html {
                     if let Some(first) = exercise_options.first() {
                         name.set(first.clone());
                     } else {
-                        name.set(ADD_EXERCISE_VALUE.into());
+                        name.set(String::new());
                     }
                 }
                 || ()
@@ -1147,7 +1167,6 @@ fn app() -> Html {
         <>
             {workout_editor_view(WorkoutEditorProps {
                 date,
-                note,
                 name,
         weight,
         reps,
@@ -1167,6 +1186,7 @@ fn app() -> Html {
                 load_workout,
                 delete_selected,
                 exercise_options,
+                active_tab,
             })}
         </>
     }

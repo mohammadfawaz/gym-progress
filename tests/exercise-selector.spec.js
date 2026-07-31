@@ -71,13 +71,14 @@ async function mockSupabase(page, options = {}) {
   return { catalogRequests, workoutRequests };
 }
 
-test('loads the exercise catalog and keeps New Exercise as the final option', async ({ page }) => {
+test('loads the exercise catalog and defaults to a real exercise', async ({ page }) => {
   await mockSupabase(page);
 
   await page.goto('/');
 
   const select = page.getByTestId('exercise-select');
   await expect(select).toBeVisible();
+  await expect(select).toHaveValue('Barbell Squats');
 
   const options = await select.locator('option').allTextContents();
   expect(options).toEqual([
@@ -87,6 +88,38 @@ test('loads the exercise catalog and keeps New Exercise as the final option', as
     'New Exercise',
   ]);
   expect(options).not.toContain('Choose an exercise');
+  await expect(page.getByRole('button', { name: 'History' })).toBeVisible();
+  await expect(page.getByText('Workout history')).not.toBeVisible();
+});
+
+test('switches workout history into its own tab', async ({ page }) => {
+  await mockSupabase(page, {
+    workouts: [
+      {
+        id: 'seed-1',
+        date: '2026-07-30',
+        note: '',
+        exercises: [
+          {
+            name: 'Cable Chest Press',
+            weight: 160,
+            unit: 'lb',
+            reps: '10, 10, 10',
+            details: '',
+          },
+        ],
+      },
+    ],
+  });
+
+  await page.goto('/');
+
+  await expect(page.getByText('Workout history')).not.toBeVisible();
+  await page.getByRole('button', { name: 'History' }).click();
+  await expect(page.getByText('Workout history')).toBeVisible();
+  await expect(page.getByText('Cable Chest Press')).toBeVisible();
+  await page.getByRole('button', { name: 'Workout' }).click();
+  await expect(page.getByTestId('exercise-select')).toBeVisible();
 });
 
 test('can add an existing exercise and a new exercise', async ({ page }) => {
@@ -150,5 +183,43 @@ test('can add an existing exercise and a new exercise', async ({ page }) => {
   await expect(page.locator('.workout-form .exercise-entry')).toContainText('Romanian Deadlift');
   await expect(catalogRequests).toContainEqual(expect.objectContaining({
     canonical_name: 'Romanian Deadlift',
+  }));
+});
+
+test('keeps custom exercise mode working after adding a new exercise', async ({ page }) => {
+  const { catalogRequests } = await mockSupabase(page, {
+    workouts: [],
+  });
+
+  await page.goto('/');
+
+  const select = page.getByTestId('exercise-select');
+  const weight = page.getByTestId('weight-input');
+  const addButton = page.getByTestId('add-exercise-button');
+  const newExerciseName = page.getByTestId('new-exercise-name');
+  const set1 = page.getByTestId('set-rep-1');
+
+  await select.selectOption('__add_exercise__');
+  await expect(newExerciseName).toBeVisible();
+
+  await newExerciseName.fill('Front Squat');
+  await weight.fill('155');
+  await set1.click();
+  await set1.click();
+  await addButton.click();
+
+  await expect(page.locator('.workout-form .exercise-entry')).toContainText('Front Squat');
+  await expect(newExerciseName).toBeVisible();
+
+  await newExerciseName.fill('Chest Supported Row');
+  await weight.fill('110');
+  await addButton.click();
+
+  await expect(page.locator('.workout-form .exercise-entry')).toContainText('Chest Supported Row');
+  await expect(catalogRequests).toContainEqual(expect.objectContaining({
+    canonical_name: 'Front Squat',
+  }));
+  await expect(catalogRequests).toContainEqual(expect.objectContaining({
+    canonical_name: 'Chest Supported Row',
   }));
 });

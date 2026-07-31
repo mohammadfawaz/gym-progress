@@ -210,6 +210,25 @@ h2 {
 .view.active {
   display: block;
 }
+.tab-bar {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 0 0 18px;
+}
+.tab-button {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #1d1415;
+  color: var(--muted);
+  font-weight: 800;
+}
+.tab-button.active {
+  background: linear-gradient(135deg, #b91925, #ef402e);
+  color: var(--ink);
+  border-color: #ff6c5f;
+}
 .modal {
   position: fixed;
   inset: 0;
@@ -355,10 +374,13 @@ h2 {
   margin: 16px 0;
   padding: 13px;
   border-radius: 12px;
-  border: 1px dashed #895657;
-  background: transparent;
-  color: var(--lime);
+  border: 0;
+  background: linear-gradient(135deg, #b91925, #ef402e);
+  color: var(--ink);
   font-weight: 800;
+  box-shadow:
+    inset 0 1px 0 #ff8a80,
+    0 10px 20px #0004;
 }
 .save-button {
   background: var(--lime);
