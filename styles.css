@@ -308,26 +308,20 @@ h2 {
   gap: 10px;
 }
 .set-chip {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #241a1b;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ef402e, #b91925);
   color: var(--ink);
-  padding: 12px 10px;
-  min-height: 74px;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
   display: grid;
-  gap: 6px;
-  justify-items: center;
-  align-content: center;
-}
-.set-chip span {
-  color: var(--muted);
-  font-size: 11px;
+  place-items: center;
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: .2px;
-}
-.set-chip strong {
-  font-size: 24px;
-  line-height: 1;
+  box-shadow:
+    inset 0 1px 0 #ff9c92,
+    0 8px 18px #0005;
 }
 .sets-hint {
   margin: -2px 0 0;

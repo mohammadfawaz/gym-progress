@@ -617,7 +617,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                             {for (0..3).map(|index| {
                                 let set_reps = set_reps.clone();
                                 let reps = reps.clone();
-                                let label = format!("Set {}", index + 1);
                                 let value = (*set_reps)[index];
                                 html! {
                                     <button
@@ -633,8 +632,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                                             reps.set(format_set_reps(&next));
                                         })}
                                     >
-                                        <span>{label}</span>
-                                        <strong>{value}</strong>
+                                        {value}
                                     </button>
                                 }
                             })}
