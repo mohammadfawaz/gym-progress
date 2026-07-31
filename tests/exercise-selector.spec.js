@@ -159,6 +159,7 @@ test('can switch to the charts tab', async ({ page }) => {
 
   await page.goto('/');
   await page.getByRole('button', { name: 'Charts' }).click();
-  await expect(page.getByRole('heading', { name: 'Charts' })).toBeVisible();
-  await expect(page.locator('.chart-card').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Progress' })).toBeVisible();
+  await expect(page.getByTestId('chart-exercise-select')).toBeVisible();
+  await expect(page.locator('.progress-chart')).toBeVisible();
 });

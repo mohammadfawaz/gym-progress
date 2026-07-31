@@ -195,11 +195,58 @@ h2 {
   margin: 12px 0 0;
   font-size: 13px;
 }
-.chart-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+.chart-section {
   margin-bottom: 24px;
+}
+.chart-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.progress-chart-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px 12px 8px;
+  overflow: hidden;
+}
+.progress-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.chart-axis,
+.chart-gridline {
+  stroke: #5a4042;
+  stroke-width: 1;
+}
+.chart-gridline {
+  stroke-dasharray: 3 4;
+  opacity: 0.45;
+}
+.chart-line {
+  fill: none;
+  stroke: var(--lime);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.chart-point {
+  fill: #fff3ee;
+  stroke: var(--lime);
+  stroke-width: 2;
+}
+.chart-x-label,
+.chart-y-label {
+  fill: var(--muted);
+  font-size: 10px;
+}
+.chart-x-label {
+  dominant-baseline: hanging;
+}
+.chart-y-label {
+  text-anchor: end;
 }
 .chart-card {
   background: var(--card);
@@ -218,18 +265,12 @@ h2 {
   font-size: 11px;
   line-height: 1.4;
 }
-.chart-section {
-  margin-bottom: 24px;
+.chart-note {
+  margin-top: 12px;
 }
 .chart-list {
   display: grid;
   gap: 12px;
-}
-.chart-row {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px;
 }
 .chart-row-head {
   display: flex;
@@ -238,22 +279,6 @@ h2 {
   align-items: center;
   margin-bottom: 8px;
   font-size: 13px;
-}
-.chart-row-value {
-  color: var(--lime);
-  font-weight: 800;
-  white-space: nowrap;
-}
-.chart-track {
-  height: 10px;
-  border-radius: 999px;
-  background: #3a2223;
-  overflow: hidden;
-}
-.chart-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #ff826d, var(--lime));
 }
 .pill {
   background: #3a2223;

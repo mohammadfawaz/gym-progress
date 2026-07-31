@@ -476,131 +476,176 @@ fn history_view(
     }
 }
 
-fn parse_reps_total(reps: &str) -> f64 {
-    reps.split(',')
-        .filter_map(|part| part.trim().parse::<f64>().ok())
-        .sum()
-}
-
-fn workout_volume(workout: &Workout) -> f64 {
-    workout
-        .exercises
+fn exercise_progress_points(workouts: &[Workout], exercise_name: &str) -> Vec<(String, f64)> {
+    let mut points = workouts
         .iter()
-        .map(|exercise| exercise.weight.unwrap_or(0.0) * parse_reps_total(&exercise.reps))
-        .sum()
+        .filter_map(|workout| {
+            workout.exercises.iter().find_map(|exercise| {
+                if exercise.name.eq_ignore_ascii_case(exercise_name) {
+                    exercise.weight.map(|weight| (workout.date.clone(), weight))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+    points.sort_by(|a, b| a.0.cmp(&b.0));
+    points
 }
 
-fn top_exercises(workouts: &[Workout]) -> Vec<(String, usize)> {
-    let mut counts: HashMap<String, usize> = HashMap::new();
-    for workout in workouts {
-        for exercise in &workout.exercises {
-            *counts.entry(exercise.name.clone()).or_insert(0) += 1;
-        }
+fn exercise_progress_chart(points: &[(String, f64)]) -> Html {
+    if points.is_empty() {
+        return html! { <p class="subtle">{"No logged sets yet for this exercise."}</p> };
     }
-    let mut items: Vec<_> = counts.into_iter().collect();
-    items.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    items
-}
 
-fn chart_bar_row(label: &str, value_label: String, pct: f64) -> Html {
-    let pct = pct.clamp(0.0, 100.0);
+    let width = 360.0;
+    let height = 220.0;
+    let left = 34.0;
+    let right = 16.0;
+    let top = 18.0;
+    let bottom = 32.0;
+    let plot_width = width - left - right;
+    let plot_height = height - top - bottom;
+    let min_weight = points
+        .iter()
+        .map(|(_, weight)| *weight)
+        .fold(f64::INFINITY, f64::min);
+    let max_weight = points
+        .iter()
+        .map(|(_, weight)| *weight)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let range = (max_weight - min_weight).max(1.0);
+    let count = points.len();
+
+    let coords: Vec<(f64, f64)> = points
+        .iter()
+        .enumerate()
+        .map(|(index, (_, weight))| {
+            let x = if count == 1 {
+                left + plot_width / 2.0
+            } else {
+                left + (plot_width * index as f64) / (count as f64 - 1.0)
+            };
+            let y = top + plot_height - (((*weight - min_weight) / range) * plot_height);
+            (x, y)
+        })
+        .collect();
+
+    let path = coords
+        .iter()
+        .enumerate()
+        .map(|(index, (x, y))| {
+            if index == 0 {
+                format!("M {x:.1} {y:.1}")
+            } else {
+                format!("L {x:.1} {y:.1}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let y_ticks = [min_weight, (min_weight + max_weight) / 2.0, max_weight];
+
     html! {
-        <div class="chart-row">
-            <div class="chart-row-head">
-                <span>{label}</span>
-                <span class="chart-row-value">{value_label}</span>
-            </div>
-            <div class="chart-track" aria-hidden="true">
-                <div class="chart-fill" style={format!("width: {pct:.0}%")}></div>
-            </div>
+        <div class="progress-chart-card">
+            <svg class="progress-chart" viewBox="0 0 360 220" role="img" aria-label="Exercise progression chart">
+                <line x1={left.to_string()} y1={(top + plot_height).to_string()} x2={(width - right).to_string()} y2={(top + plot_height).to_string()} class="chart-axis" />
+                <line x1={left.to_string()} y1={top.to_string()} x2={left.to_string()} y2={(top + plot_height).to_string()} class="chart-axis" />
+                <path d={path} class="chart-line" />
+                {for coords.iter().enumerate().map(|(i, (x, y))| {
+                    let label = format!("Session {}", i + 1);
+                    let title = format!("{} · {:.1} lbs", points[i].0, points[i].1);
+                    html! {
+                        <g>
+                            <circle cx={x.to_string()} cy={y.to_string()} r="4.5" class="chart-point">
+                                <title>{title}</title>
+                            </circle>
+                            <text x={x.to_string()} y={(height - 10.0).to_string()} text-anchor="middle" class="chart-x-label">{label}</text>
+                        </g>
+                    }
+                })}
+                {for y_ticks.iter().map(|tick| {
+                    let y = if range <= 0.0 {
+                        top + plot_height / 2.0
+                    } else {
+                        top + plot_height - (((*tick - min_weight) / range) * plot_height)
+                    };
+                    html! {
+                        <g>
+                            <line x1={left.to_string()} y1={y.to_string()} x2={(width - right).to_string()} y2={y.to_string()} class="chart-gridline" />
+                            <text x="10" y={(y + 4.0).to_string()} class="chart-y-label">{format!("{tick:.0}")}</text>
+                        </g>
+                    }
+                })}
+            </svg>
         </div>
     }
 }
 
-fn charts_view(workouts: &[Workout], logout: Callback<MouseEvent>) -> Html {
-    let ordered: Vec<_> = workouts.iter().collect();
-    let volumes: Vec<_> = ordered
-        .iter()
-        .map(|w| (w.date.clone(), workout_volume(w)))
-        .collect();
-    let max_volume = volumes.iter().map(|(_, v)| *v).fold(0.0, f64::max);
-    let top = top_exercises(workouts);
-    let total_volume: f64 = volumes.iter().map(|(_, v)| *v).sum();
-    let top_exercise = top
-        .first()
-        .map(|(name, count)| format!("{name} · {count} sessions"))
-        .unwrap_or_else(|| "No exercise data yet".into());
+fn exercise_chart_view(
+    workouts: &[Workout],
+    exercise_options: &[String],
+    selected_exercise: UseStateHandle<String>,
+    logout: Callback<MouseEvent>,
+) -> Html {
+    let selected = (*selected_exercise).clone();
+    let points = exercise_progress_points(workouts, &selected);
+    let latest = points.last().map(|(_, weight)| *weight);
+    let previous = points.iter().rev().nth(1).map(|(_, weight)| *weight);
+    let delta = match (previous, latest) {
+        (Some(prev), Some(last)) => Some(last - prev),
+        _ => None,
+    };
 
     html! {
         <main class="app-shell">
             <header class="topbar">
                 <div>
                     <p class="eyebrow">{"TRAINING ANALYTICS"}</p>
-                    <h1>{"Charts"}</h1>
+                    <h1>{"Progress"}</h1>
                 </div>
                 <button class="text-button" type="button" onclick={logout}>{"Logout"}</button>
             </header>
             <section class="hero-card">
-                <p class="eyebrow">{"OVERVIEW"}</p>
-                <p>{"A quick read on your workload and the exercises you keep coming back to."}</p>
+                <p class="eyebrow">{"EXERCISE CHART"}</p>
+                <p>{"Pick one lift and track how it changes over time."}</p>
             </section>
-            <section class="chart-grid">
-                <article class="chart-card">
-                    <p class="eyebrow">{"TOTAL VOLUME"}</p>
-                    <strong>{format!("{total_volume:.0}")}</strong>
-                    <span>{"lbs × reps across all logged workouts"}</span>
-                </article>
-                <article class="chart-card">
-                    <p class="eyebrow">{"WORKOUTS"}</p>
-                    <strong>{workouts.len()}</strong>
-                    <span>{"sessions in history"}</span>
-                </article>
-                <article class="chart-card">
-                    <p class="eyebrow">{"TOP EXERCISE"}</p>
-                    <strong>{top_exercise}</strong>
-                    <span>{"most frequently logged lift"}</span>
-                </article>
+            <section class="workout-form">
+                <label class="field-label">
+                    {"Exercise"}
+                    <select
+                        data-testid="chart-exercise-select"
+                        value={selected.clone()}
+                        onchange={{
+                            let selected_exercise = selected_exercise.clone();
+                            Callback::from(move |e: Event| selected_exercise.set(e.target_unchecked_into::<HtmlSelectElement>().value()))
+                        }}
+                    >
+                        {for exercise_options.iter().map(|exercise| html!{ <option value={exercise.clone()}>{exercise.clone()}</option> })}
+                    </select>
+                </label>
             </section>
             <section class="chart-section">
+                <div class="chart-summary">
+                    <article class="chart-card">
+                        <p class="eyebrow">{"LATEST"}</p>
+                        <strong>{latest.map(|w| format!("{w:.1} lbs")).unwrap_or_else(|| "—".into())}</strong>
+                        <span>{"most recent logged weight"}</span>
+                    </article>
+                    <article class="chart-card">
+                        <p class="eyebrow">{"CHANGE"}</p>
+                        <strong>{delta.map(|d| format!("{:+.1} lbs", d)).unwrap_or_else(|| "—".into())}</strong>
+                        <span>{"since the previous session"}</span>
+                    </article>
+                </div>
                 <div class="section-heading">
                     <div>
-                        <p class="eyebrow">{"WORKOUT VOLUME"}</p>
-                        <h2>{"Per session"}</h2>
+                        <p class="eyebrow">{"PROGRESSION"}</p>
+                        <h2>{if selected.is_empty() { "No exercise selected" } else { selected.as_str() }}</h2>
                     </div>
                 </div>
-                <div class="chart-list">
-                    {if volumes.is_empty() {
-                        html! { <p class="subtle">{"No workouts to chart yet."}</p> }
-                    } else {
-                        html! {
-                            for volumes.iter().map(|(date, volume)| {
-                                let pct = if max_volume > 0.0 { (volume / max_volume) * 100.0 } else { 0.0 };
-                                chart_bar_row(date, format!("{volume:.0}"), pct)
-                            })
-                        }
-                    }}
-                </div>
-            </section>
-            <section class="chart-section">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">{"MOST USED"}</p>
-                        <h2>{"Exercises"}</h2>
-                    </div>
-                </div>
-                <div class="chart-list">
-                    {if top.is_empty() {
-                        html! { <p class="subtle">{"No exercise history yet."}</p> }
-                    } else {
-                        let max_count = top.first().map(|(_, count)| *count as f64).unwrap_or(0.0);
-                        html! {
-                            for top.iter().take(8).map(|(name, count)| {
-                                let pct = if max_count > 0.0 { (*count as f64 / max_count) * 100.0 } else { 0.0 };
-                                chart_bar_row(name, format!("{count} sessions"), pct)
-                            })
-                        }
-                    }}
-                </div>
+                {exercise_progress_chart(&points)}
+                <p class="subtle chart-note">{"The x-axis is session order. Dates are used to sort the points, but the chart keeps them visually abstracted."}</p>
             </section>
         </main>
     }
@@ -791,6 +836,7 @@ fn app() -> Html {
     let draft = use_state(Vec::<Exercise>::new);
     let editing_id = use_state(|| None::<String>);
     let active_tab = use_state(|| AppTab::Log);
+    let selected_chart_exercise = use_state(String::new);
 
     {
         let token = token.clone();
@@ -1034,6 +1080,7 @@ fn app() -> Html {
         let reps = reps.clone();
         let details = details.clone();
         let active_tab = active_tab.clone();
+        let selected_chart_exercise = selected_chart_exercise.clone();
         Callback::from(move |_| {
             clear_auth();
             token.set(None);
@@ -1050,6 +1097,7 @@ fn app() -> Html {
             reps.set(String::new());
             details.set(String::new());
             active_tab.set(AppTab::Log);
+            selected_chart_exercise.set(String::new());
         })
     };
     let remove_draft = {
@@ -1225,6 +1273,26 @@ fn app() -> Html {
             },
         );
     }
+    {
+        let selected_chart_exercise = selected_chart_exercise.clone();
+        let exercise_options = exercise_options.clone();
+        let on_charts_tab = matches!(*active_tab, AppTab::Charts);
+        use_effect_with((exercise_options.len(), on_charts_tab), move |_| {
+            if on_charts_tab {
+                let current = (*selected_chart_exercise).clone();
+                if current.is_empty()
+                    || !exercise_options
+                        .iter()
+                        .any(|option| option.eq_ignore_ascii_case(&current))
+                {
+                    if let Some(first) = exercise_options.first() {
+                        selected_chart_exercise.set(first.clone());
+                    }
+                }
+            }
+            || ()
+        });
+    }
     let main_view = match *active_tab {
         AppTab::Log => workout_editor_view(WorkoutEditorProps {
             date,
@@ -1247,7 +1315,12 @@ fn app() -> Html {
             delete_selected,
             exercise_options,
         }),
-        AppTab::Charts => charts_view(&workouts, logout.clone()),
+        AppTab::Charts => exercise_chart_view(
+            &workouts,
+            &exercise_options,
+            selected_chart_exercise.clone(),
+            logout.clone(),
+        ),
     };
     let switch_to_log = {
         let active_tab = active_tab.clone();
