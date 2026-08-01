@@ -353,6 +353,12 @@ h2 {
   display: grid;
   gap: 12px;
 }
+.exercise-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+}
 .grow {
   flex: 1;
 }
@@ -377,13 +383,10 @@ h2 {
     0 10px 20px #0004;
 }
 .save-button {
-  position: sticky;
-  bottom: calc(12px + env(safe-area-inset-bottom));
-  width: calc(100% - 36px);
-  max-width: 664px;
-  margin: 14px auto 0;
-  z-index: 6;
-  backdrop-filter: blur(8px);
+  width: 100%;
+  margin-top: 16px;
+  justify-content: center;
+  gap: 10px;
 }
 .empty-state {
   padding: 14px 0 4px;
@@ -464,12 +467,7 @@ h2 {
 }
 @media (max-width: 520px) {
   .app-shell {
-    padding-bottom: 104px;
-  }
-  .save-button {
-    width: 100%;
-    max-width: none;
-    margin-top: 12px;
+    padding-bottom: 90px;
   }
   .topbar {
     align-items: start;

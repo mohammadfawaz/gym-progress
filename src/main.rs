@@ -508,7 +508,6 @@ struct WorkoutEditorProps {
     show_new_exercise: UseStateHandle<bool>,
     draft: UseStateHandle<Vec<Exercise>>,
     workouts: UseStateHandle<Vec<Workout>>,
-    editing_id: UseStateHandle<Option<String>>,
     status: UseStateHandle<String>,
     new_exercise_name: UseStateHandle<String>,
     on_name: Callback<Event>,
@@ -534,7 +533,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         show_new_exercise,
         draft,
         workouts,
-        editing_id,
         status,
         new_exercise_name,
         on_name,
@@ -546,6 +544,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         delete_selected,
         exercise_options,
         active_tab,
+        ..
     } = props;
 
     html! {
@@ -612,7 +611,8 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                             }}
                         />
                     </label>
-                    <div class="exercise-stack">
+                    <div class="exercise-card">
+                        <div class="exercise-stack">
                         <label class="field-label">
                             {"Exercise"}
                             <select data-testid="exercise-select" value={(*name).clone()} onchange={on_name}>
@@ -690,14 +690,14 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                             />
                         </label>
                         <button class="add-button" data-testid="add-exercise-button" type="button" onclick={add}>{"+ Add Exercise"}</button>
+                        </div>
                     </div>
                     {draft_entries(&draft, remove_draft)}
                     <p class="subtle">{(*status).clone()}</p>
+                    <button class="primary-button save-button" type="button" onclick={save}>
+                        {"Log Workout"}
+                    </button>
                 </section>
-                <button class="primary-button save-button floating-save" type="button" onclick={save}>
-                    {if editing_id.is_some() { "Update workout" } else { "Save workout" }}
-                    <span>{"✓"}</span>
-                </button>
             </section>
             <section class={classes!("view", (*active_tab == "history").then_some("active"))}>
                 <div class="section-heading">
@@ -717,7 +717,7 @@ fn app() -> Html {
     let (stored_token, stored_uid) = stored_auth();
     let token = use_state(|| stored_token);
     let uid = use_state(|| stored_uid);
-    let workouts = use_state(Vec::<Workout>::new);
+    let workouts = use_state(|| LocalStorage::get::<Vec<Workout>>(LOCAL).unwrap_or_default());
     let exercise_catalog = use_state(Vec::<String>::new);
     let exercise_aliases = use_state(HashMap::<String, String>::new);
     let status = use_state(String::new);
@@ -1205,7 +1205,6 @@ fn app() -> Html {
                 show_new_exercise,
                 draft,
                 workouts,
-                editing_id,
                 status,
                 new_exercise_name,
                 on_name,
