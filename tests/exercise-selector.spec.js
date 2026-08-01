@@ -3,6 +3,7 @@ const { test, expect } = require('@playwright/test');
 const STORAGE_KEY = 'lift-log-v1';
 const AUTH_TOKEN_KEY = 'lift-log-auth-token';
 const AUTH_UID_KEY = 'lift-log-auth-uid';
+const THEME_KEY = 'lift-log-theme-v2';
 
 const exerciseCatalog = [
   { canonical_name: 'Bench Press', aliases: ['Bench press'], sort_order: 1 },
@@ -58,14 +59,16 @@ async function mockSupabase(page, options = {}) {
     await route.fulfill(jsonResponse({ error: `Unhandled route: ${method} ${pathname}` }, 500));
   });
 
-  await page.addInitScript(({ storageKey, tokenKey, uidKey }) => {
+  await page.addInitScript(({ storageKey, tokenKey, uidKey, themeKey }) => {
     localStorage.removeItem(storageKey);
     localStorage.setItem(tokenKey, 'test-token');
     localStorage.setItem(uidKey, '00000000-0000-0000-0000-000000000001');
+    localStorage.removeItem(themeKey);
   }, {
     storageKey: STORAGE_KEY,
     tokenKey: AUTH_TOKEN_KEY,
     uidKey: AUTH_UID_KEY,
+    themeKey: THEME_KEY,
   });
 
   return { catalogRequests, workoutRequests };
@@ -79,6 +82,7 @@ test('loads the exercise catalog and defaults to a real exercise', async ({ page
   const select = page.getByTestId('exercise-select');
   await expect(select).toBeVisible();
   await expect(select).toHaveValue('Barbell Squats');
+  await expect(page.getByTestId('theme-select')).toHaveValue('dark');
 
   const options = await select.locator('option').allTextContents();
   expect(options).toEqual([

@@ -11,7 +11,7 @@ const KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIs
 const LOCAL: &str = "lift-log-v1";
 const AUTH_TOKEN_KEY: &str = "lift-log-auth-token";
 const AUTH_UID_KEY: &str = "lift-log-auth-uid";
-const THEME_KEY: &str = "lift-log-theme";
+const THEME_KEY: &str = "lift-log-theme-v2";
 const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -4,6 +4,7 @@
   --paper: #151111;
   --card: #211718;
   --line: #433032;
+  --control-bg: #271b1c;
   --lime: #ff4d3d;
   --dark: #3a0d10;
   --accent-start: #b91925;
@@ -12,17 +13,18 @@
   --accent-strong: #3a0d10;
 }
 .theme-light {
-  --ink: #102033;
-  --muted: #58718d;
-  --paper: #edf5ff;
-  --card: #ffffff;
-  --line: #c8d8ea;
+  --ink: #10253e;
+  --muted: #5d7694;
+  --paper: #edf4ff;
+  --card: #f8fbff;
+  --line: #c7d8ea;
+  --control-bg: #e8f1fb;
   --lime: #2f77d0;
   --dark: #dcecff;
-  --accent-start: #70aef5;
+  --accent-start: #7fb6ff;
   --accent-end: #2f77d0;
-  --accent-soft: #94c3ff;
-  --accent-strong: #d8e8fb;
+  --accent-soft: #a8ccff;
+  --accent-strong: #ddebfb;
 }
 * {
   box-sizing: border-box;
@@ -285,7 +287,7 @@ h2 {
 }
 .field-label input,
 .field-label select {
-  background: #271b1c;
+  background: var(--control-bg);
   border: 1px solid var(--line);
   color: var(--ink);
   border-radius: 10px;
@@ -365,7 +367,8 @@ h2 {
 .remove-exercise {
   width: 32px;
   height: 32px;
-  background: #3a2829;
+  background: var(--accent-strong);
+  color: var(--ink);
   font-size: 22px;
   flex: none;
 }
