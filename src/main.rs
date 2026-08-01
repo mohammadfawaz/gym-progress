@@ -308,6 +308,7 @@ async fn sync_user_data(
         &alias_map,
     );
     let merged = merge_workouts(remote, local);
+    let _ = LocalStorage::set(LOCAL, &merged);
     for w in &merged {
         let _ = put_workout(access_token, user_id, w).await;
     }
@@ -1061,6 +1062,7 @@ fn app() -> Html {
                                 all.retain(|existing| existing.id != *id);
                             }
                             all.insert(0, w);
+                            let _ = LocalStorage::set(LOCAL, &all);
                             workouts.set(all);
                             reset_editor.emit(());
                             status.set("Workout saved to Supabase.".into())
@@ -1087,6 +1089,7 @@ fn app() -> Html {
                         Ok(()) => {
                             let mut next = (*workouts).clone();
                             next.retain(|w| w.id != id);
+                            let _ = LocalStorage::set(LOCAL, &next);
                             workouts.set(next);
                             status.set("Workout deleted.".into());
                         }
