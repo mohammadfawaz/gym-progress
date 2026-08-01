@@ -472,19 +472,25 @@ fn history_view(
 ) -> Html {
     html! {
         <div class="workout-list">
-            {for workouts.iter().map(|w| {
-                let on_edit = {
-                    let load_workout = load_workout.clone();
-                    let w = w.clone();
-                    Callback::from(move |_| load_workout.emit(w.clone()))
-                };
-                let on_delete = {
-                    let delete_selected = delete_selected.clone();
-                    let id = w.id.clone();
-                    Callback::from(move |_| delete_selected.emit(id.clone()))
-                };
-                workout_view(w, on_edit, on_delete)
-            })}
+            {if workouts.is_empty() {
+                html! { <p class="subtle empty-state">{"No workouts yet."}</p> }
+            } else {
+                html! {
+                    {for workouts.iter().map(|w| {
+                        let on_edit = {
+                            let load_workout = load_workout.clone();
+                            let w = w.clone();
+                            Callback::from(move |_| load_workout.emit(w.clone()))
+                        };
+                        let on_delete = {
+                            let delete_selected = delete_selected.clone();
+                            let id = w.id.clone();
+                            Callback::from(move |_| delete_selected.emit(id.clone()))
+                        };
+                        workout_view(w, on_edit, on_delete)
+                    })}
+                }
+            }}
         </div>
     }
 }
@@ -570,9 +576,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                 </button>
             </div>
             <section class={classes!("view", (*active_tab == "workout").then_some("active"))}>
-                <section class="hero-card">
-                    <p class="eyebrow">{"NEW WORKOUT"}</p>
-                </section>
                 <section class="workout-form">
                     <label class="field-label">
                         {"Date"}
