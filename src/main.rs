@@ -11,6 +11,7 @@ const KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIs
 const LOCAL: &str = "lift-log-v1";
 const AUTH_TOKEN_KEY: &str = "lift-log-auth-token";
 const AUTH_UID_KEY: &str = "lift-log-auth-uid";
+const THEME_KEY: &str = "lift-log-theme";
 const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -499,6 +500,7 @@ fn history_view(
 struct WorkoutEditorProps {
     date: UseStateHandle<String>,
     name: UseStateHandle<String>,
+    theme: UseStateHandle<String>,
     weight: UseStateHandle<String>,
     reps: UseStateHandle<String>,
     set_reps: UseStateHandle<[u32; 3]>,
@@ -524,6 +526,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
     let WorkoutEditorProps {
         date,
         name,
+        theme,
         weight,
         reps,
         set_reps,
@@ -546,13 +549,33 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
     } = props;
 
     html! {
-        <main class="app-shell">
+        <main class={classes!("app-shell", format!("theme-{}", *theme))}>
             <header class="topbar">
                 <div>
                     <p class="eyebrow">{"PERSONAL TRAINING LOG"}</p>
                     <h1>{"Lift Log"}</h1>
                 </div>
-                <button class="text-button" type="button" onclick={logout}>{"Logout"}</button>
+                <div class="topbar-actions">
+                    <label class="theme-picker">
+                        <span class="sr-only">{"Theme"}</span>
+                        <select
+                            data-testid="theme-select"
+                            value={(*theme).clone()}
+                            onchange={{
+                                let theme = theme.clone();
+                                Callback::from(move |e: Event| {
+                                    let value = e.target_unchecked_into::<HtmlSelectElement>().value();
+                                    let _ = LocalStorage::set(THEME_KEY, value.clone());
+                                    theme.set(value);
+                                })
+                            }}
+                        >
+                            <option value="dark">{"Dark"}</option>
+                            <option value="light">{"Light"}</option>
+                        </select>
+                    </label>
+                    <button class="text-button" type="button" onclick={logout}>{"Logout"}</button>
+                </div>
             </header>
             <div class="tab-bar" role="tablist" aria-label="Lift Log sections">
                 <button
@@ -669,12 +692,12 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                         <button class="add-button" data-testid="add-exercise-button" type="button" onclick={add}>{"+ Add Exercise"}</button>
                     </div>
                     {draft_entries(&draft, remove_draft)}
-                    <button class="primary-button save-button" type="button" onclick={save}>
-                        {if editing_id.is_some() { "Update workout" } else { "Save workout" }}
-                        <span>{"✓"}</span>
-                    </button>
                     <p class="subtle">{(*status).clone()}</p>
                 </section>
+                <button class="primary-button save-button floating-save" type="button" onclick={save}>
+                    {if editing_id.is_some() { "Update workout" } else { "Save workout" }}
+                    <span>{"✓"}</span>
+                </button>
             </section>
             <section class={classes!("view", (*active_tab == "history").then_some("active"))}>
                 <div class="section-heading">
@@ -702,6 +725,7 @@ fn app() -> Html {
     let password = use_state(String::new);
     let signup = use_state(|| false);
     let active_tab = use_state(|| "workout".to_string());
+    let theme = use_state(|| LocalStorage::get(THEME_KEY).unwrap_or_else(|_| "dark".to_string()));
     let date = use_state(|| "2026-07-30".to_string());
     let note = use_state(String::new);
     let name = use_state(String::new);
@@ -1193,6 +1217,7 @@ fn app() -> Html {
                 delete_selected,
                 exercise_options,
                 active_tab,
+                theme,
             })}
         </>
     }

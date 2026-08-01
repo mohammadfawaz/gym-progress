@@ -6,6 +6,23 @@
   --line: #433032;
   --lime: #ff4d3d;
   --dark: #3a0d10;
+  --accent-start: #b91925;
+  --accent-end: #ef402e;
+  --accent-soft: #ff8a80;
+  --accent-strong: #3a0d10;
+}
+.theme-light {
+  --ink: #102033;
+  --muted: #58718d;
+  --paper: #edf5ff;
+  --card: #ffffff;
+  --line: #c8d8ea;
+  --lime: #2f77d0;
+  --dark: #dcecff;
+  --accent-start: #70aef5;
+  --accent-end: #2f77d0;
+  --accent-soft: #94c3ff;
+  --accent-strong: #d8e8fb;
 }
 * {
   box-sizing: border-box;
@@ -35,7 +52,7 @@ button {
 .app-shell {
   max-width: 700px;
   margin: 0 auto;
-  padding: calc(24px + env(safe-area-inset-top)) 18px 104px;
+  padding: calc(24px + env(safe-area-inset-top)) 18px 160px;
 }
 .topbar,
 .section-heading,
@@ -91,12 +108,15 @@ h2 {
   padding: 15px 17px;
   border: 0;
   border-radius: 13px;
-  background: var(--dark);
+  background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
   color: var(--ink);
   font-weight: 800;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow:
+    inset 0 1px 0 var(--accent-soft),
+    0 10px 20px #0004;
 }
 .primary-button span {
   font-size: 20px;
@@ -170,7 +190,7 @@ h2 {
   font-size: 13px;
 }
 .pill {
-  background: #3a2223;
+  background: var(--accent-strong);
   color: var(--lime);
   border-radius: 100px;
   padding: 5px 8px;
@@ -199,9 +219,9 @@ h2 {
   font-weight: 800;
 }
 .tab-button.active {
-  background: linear-gradient(135deg, #b91925, #ef402e);
+  background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
   color: var(--ink);
-  border-color: #ff6c5f;
+  border-color: var(--accent-soft);
 }
 .modal {
   position: fixed;
@@ -303,7 +323,7 @@ h2 {
 .set-chip {
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(180deg, #ef402e, #b91925);
+  background: linear-gradient(180deg, var(--accent-end), var(--accent-start));
   color: var(--ink);
   width: 64px;
   height: 64px;
@@ -317,9 +337,9 @@ h2 {
     0 8px 18px #0005;
 }
 .set-chip-dim {
-  background: linear-gradient(180deg, #d83c2d, #8f171f);
+  background: linear-gradient(180deg, var(--accent-end), var(--accent-strong));
   box-shadow:
-    inset 0 1px 0 #ff8c82,
+    inset 0 1px 0 var(--accent-soft),
     0 6px 14px #0004;
 }
 .sets-hint {
@@ -349,22 +369,49 @@ h2 {
   padding: 13px;
   border-radius: 12px;
   border: 0;
-  background: linear-gradient(135deg, #b91925, #ef402e);
+  background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
   color: var(--ink);
   font-weight: 800;
   box-shadow:
-    inset 0 1px 0 #ff8a80,
+    inset 0 1px 0 var(--accent-soft),
     0 10px 20px #0004;
 }
 .save-button {
-  background: linear-gradient(135deg, #b91925, #ef402e);
-  color: var(--ink);
-  box-shadow:
-    inset 0 1px 0 #ff8a80,
-    0 10px 20px #0004;
+  position: fixed;
+  left: 18px;
+  right: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  width: calc(100% - 36px);
+  max-width: 664px;
+  margin: 0 auto;
+  z-index: 6;
 }
 .empty-state {
   padding: 14px 0 4px;
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.theme-picker select {
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .last-time {
   color: #ff9c92;
