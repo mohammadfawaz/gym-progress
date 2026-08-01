@@ -52,7 +52,7 @@ button {
 .app-shell {
   max-width: 700px;
   margin: 0 auto;
-  padding: calc(24px + env(safe-area-inset-top)) 18px 160px;
+  padding: calc(24px + env(safe-area-inset-top)) 18px 120px;
 }
 .topbar,
 .section-heading,
@@ -377,14 +377,13 @@ h2 {
     0 10px 20px #0004;
 }
 .save-button {
-  position: fixed;
-  left: 18px;
-  right: 18px;
-  bottom: calc(18px + env(safe-area-inset-bottom));
+  position: sticky;
+  bottom: calc(12px + env(safe-area-inset-bottom));
   width: calc(100% - 36px);
   max-width: 664px;
-  margin: 0 auto;
+  margin: 14px auto 0;
   z-index: 6;
+  backdrop-filter: blur(8px);
 }
 .empty-state {
   padding: 14px 0 4px;
@@ -393,6 +392,8 @@ h2 {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .theme-picker select {
   min-height: 38px;
@@ -460,4 +461,20 @@ h2 {
 .auth-toggle {
   display: block;
   margin: 18px auto;
+}
+@media (max-width: 520px) {
+  .app-shell {
+    padding-bottom: 104px;
+  }
+  .save-button {
+    width: 100%;
+    max-width: none;
+    margin-top: 12px;
+  }
+  .topbar {
+    align-items: start;
+  }
+  .topbar-actions {
+    width: 100%;
+  }
 }
