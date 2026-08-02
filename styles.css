@@ -26,6 +26,20 @@
   --accent-soft: #a8ccff;
   --accent-strong: #ddebfb;
 }
+.theme-pink {
+  --ink: #321127;
+  --muted: #8b5570;
+  --paper: #fff0f6;
+  --card: #fff8fc;
+  --line: #f0c9d9;
+  --control-bg: #ffe6f1;
+  --lime: #d92f77;
+  --dark: #ffe0ec;
+  --accent-start: #ff8bbb;
+  --accent-end: #d92f77;
+  --accent-soft: #ffc0da;
+  --accent-strong: #ffe1eb;
+}
 * {
   box-sizing: border-box;
 }
@@ -169,7 +183,7 @@ h2 {
   width: 100%;
 }
 .workout-card:hover {
-  border-color: #825052;
+  border-color: var(--accent-soft);
 }
 .workout-card-top {
   display: flex;
@@ -216,7 +230,7 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px 14px;
-  background: #1d1415;
+  background: var(--card);
   color: var(--muted);
   font-weight: 800;
 }
@@ -335,7 +349,7 @@ h2 {
   font-size: 22px;
   font-weight: 800;
   box-shadow:
-    inset 0 1px 0 #ff9c92,
+    inset 0 1px 0 var(--accent-soft),
     0 8px 18px #0005;
 }
 .set-chip-dim {

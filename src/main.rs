@@ -11,6 +11,7 @@ const KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIs
 const LOCAL: &str = "lift-log-v1";
 const AUTH_TOKEN_KEY: &str = "lift-log-auth-token";
 const AUTH_UID_KEY: &str = "lift-log-auth-uid";
+const AUTH_REFRESH_KEY: &str = "lift-log-auth-refresh";
 const THEME_KEY: &str = "lift-log-theme-v2";
 const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
 
@@ -33,6 +34,8 @@ struct Auth {
     #[serde(default)]
     access_token: Option<String>,
     #[serde(default)]
+    refresh_token: Option<String>,
+    #[serde(default)]
     session: Option<AuthSession>,
     #[serde(default)]
     user: Option<User>,
@@ -41,6 +44,8 @@ struct Auth {
 struct AuthSession {
     #[serde(default)]
     access_token: Option<String>,
+    #[serde(default)]
+    refresh_token: Option<String>,
     #[serde(default)]
     user: Option<User>,
 }
@@ -60,6 +65,10 @@ struct DbExerciseCatalog {
     canonical_name: String,
     #[serde(default)]
     aliases: Vec<String>,
+}
+#[derive(Deserialize)]
+struct DbUserSettings {
+    theme: String,
 }
 
 fn headers(
@@ -101,12 +110,60 @@ fn auth_token(auth: &Auth) -> Option<String> {
             .and_then(|session| session.access_token.clone())
     })
 }
+fn auth_refresh_token(auth: &Auth) -> Option<String> {
+    auth.refresh_token.clone().or_else(|| {
+        auth.session
+            .as_ref()
+            .and_then(|session| session.refresh_token.clone())
+    })
+}
 fn auth_user_id(auth: &Auth) -> Option<String> {
     auth.user.as_ref().map(|user| user.id.clone()).or_else(|| {
         auth.session
             .as_ref()
             .and_then(|session| session.user.as_ref().map(|user| user.id.clone()))
     })
+}
+fn persist_session(access_token: &str, user_id: &str, refresh_token: &str) {
+    let _ = LocalStorage::set(AUTH_TOKEN_KEY, access_token.to_string());
+    let _ = LocalStorage::set(AUTH_UID_KEY, user_id.to_string());
+    let _ = LocalStorage::set(AUTH_REFRESH_KEY, refresh_token.to_string());
+}
+async fn refresh_session(refresh_token: &str) -> Result<Auth, String> {
+    let req = headers(
+        Request::post(&format!("{URL}/auth/v1/token?grant_type=refresh_token")),
+        None,
+    )
+    .header("Content-Type", "application/json");
+    let res = req
+        .body(serde_json::json!({"refresh_token": refresh_token}).to_string())
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.ok() {
+        return Err(res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Could not refresh session".into()));
+    }
+    res.json().await.map_err(|e| e.to_string())
+}
+async fn current_access_token(
+    token: Option<String>,
+    refresh_token: Option<String>,
+) -> Result<(String, Option<String>), String> {
+    if let Some(rt) = refresh_token {
+        let auth = refresh_session(&rt).await?;
+        let next_token =
+            auth_token(&auth).ok_or_else(|| "Could not refresh session".to_string())?;
+        let next_refresh = auth_refresh_token(&auth).or(Some(rt));
+        Ok((next_token, next_refresh))
+    } else if let Some(token) = token {
+        Ok((token, None))
+    } else {
+        Err("Sign in first.".into())
+    }
 }
 async fn get_workouts(token: &str, uid: &str) -> Result<Vec<Workout>, String> {
     let url = format!("{URL}/rest/v1/workouts?select=id,workout_date,note,exercises&user_id=eq.{uid}&order=workout_date.desc");
@@ -146,6 +203,47 @@ async fn get_exercise_catalog(token: &str) -> Result<Vec<DbExerciseCatalog>, Str
             .unwrap_or_else(|_| "Could not load exercise catalog".into()));
     }
     res.json().await.map_err(|e| e.to_string())
+}
+async fn get_user_theme(token: &str, uid: &str) -> Result<Option<String>, String> {
+    let url = format!("{URL}/rest/v1/user_settings?select=theme&user_id=eq.{uid}&limit=1");
+    let res = headers(Request::get(&url), Some(token))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.ok() {
+        return Err(res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Could not load settings".into()));
+    }
+    let rows: Vec<DbUserSettings> = res.json().await.map_err(|e| e.to_string())?;
+    Ok(rows.into_iter().next().map(|row| row.theme))
+}
+async fn put_user_theme(token: &str, uid: &str, theme: &str) -> Result<(), String> {
+    let req = headers(
+        Request::post(&format!("{URL}/rest/v1/user_settings?on_conflict=user_id")),
+        Some(token),
+    )
+    .header("Content-Type", "application/json")
+    .header("Prefer", "resolution=merge-duplicates");
+    let body = serde_json::json!({
+        "user_id": uid,
+        "theme": theme
+    });
+    let res = req
+        .body(body.to_string())
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if res.ok() {
+        Ok(())
+    } else {
+        Err(res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Could not save theme".into()))
+    }
 }
 async fn put_workout(token: &str, uid: &str, w: &Workout) -> Result<(), String> {
     let req = headers(
@@ -218,15 +316,17 @@ fn today_string() -> String {
     let iso: String = js_sys::Date::new_0().to_iso_string().into();
     iso[..10].to_string()
 }
-fn stored_auth() -> (Option<String>, Option<String>) {
+fn stored_auth() -> (Option<String>, Option<String>, Option<String>) {
     (
         LocalStorage::get(AUTH_TOKEN_KEY).ok(),
         LocalStorage::get(AUTH_UID_KEY).ok(),
+        LocalStorage::get(AUTH_REFRESH_KEY).ok(),
     )
 }
 fn clear_auth() {
     let _ = LocalStorage::delete(AUTH_TOKEN_KEY);
     let _ = LocalStorage::delete(AUTH_UID_KEY);
+    let _ = LocalStorage::delete(AUTH_REFRESH_KEY);
 }
 fn input_value(e: InputEvent) -> String {
     e.target_unchecked_into::<HtmlInputElement>().value()
@@ -295,9 +395,13 @@ fn build_catalog(rows: &[DbExerciseCatalog]) -> (Vec<String>, HashMap<String, St
 async fn sync_user_data(
     access_token: &str,
     user_id: &str,
-) -> Result<(Vec<Workout>, Vec<String>, HashMap<String, String>), String> {
+) -> Result<(Vec<Workout>, Vec<String>, HashMap<String, String>, String), String> {
     let catalog_rows = get_exercise_catalog(access_token).await.unwrap_or_default();
     let (catalog_names, alias_map) = build_catalog(&catalog_rows);
+    let theme = get_user_theme(access_token, user_id)
+        .await
+        .unwrap_or(None)
+        .unwrap_or_else(|| "dark".into());
     let remote = canonicalize_workouts(
         get_workouts(access_token, user_id)
             .await
@@ -313,7 +417,7 @@ async fn sync_user_data(
     for w in &merged {
         let _ = put_workout(access_token, user_id, w).await;
     }
-    Ok((merged, catalog_names, alias_map))
+    Ok((merged, catalog_names, alias_map, theme))
 }
 fn canonicalize_workout(w: &Workout, aliases: &HashMap<String, String>) -> Workout {
     let mut next = w.clone();
@@ -501,6 +605,9 @@ struct WorkoutEditorProps {
     date: UseStateHandle<String>,
     name: UseStateHandle<String>,
     theme: UseStateHandle<String>,
+    token: UseStateHandle<Option<String>>,
+    uid: UseStateHandle<Option<String>>,
+    refresh_token: UseStateHandle<Option<String>>,
     weight: UseStateHandle<String>,
     reps: UseStateHandle<String>,
     set_reps: UseStateHandle<[u32; 3]>,
@@ -526,6 +633,9 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         date,
         name,
         theme,
+        token,
+        uid,
+        refresh_token,
         weight,
         reps,
         set_reps,
@@ -562,15 +672,48 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                             value={(*theme).clone()}
                             onchange={{
                                 let theme = theme.clone();
+                                let token = token.clone();
+                                let uid = uid.clone();
+                                let refresh_token = refresh_token.clone();
+                                let status = status.clone();
                                 Callback::from(move |e: Event| {
                                     let value = e.target_unchecked_into::<HtmlSelectElement>().value();
-                                    let _ = LocalStorage::set(THEME_KEY, value.clone());
-                                    theme.set(value);
+                                    let selected = value.clone();
+                                    theme.set(selected.clone());
+                                    let token = token.clone();
+                                    let uid = uid.clone();
+                                    let refresh_token = refresh_token.clone();
+                                    let status = status.clone();
+                                    spawn_local(async move {
+                                        let token_value = (*token).clone();
+                                        let refresh_value = (*refresh_token).clone();
+                                        let uid_value = (*uid).clone();
+                                        match current_access_token(token_value, refresh_value).await {
+                                            Ok((fresh_token, next_refresh)) => {
+                                                token.set(Some(fresh_token.clone()));
+                                                if let Some(rt) = next_refresh {
+                                                    if let Some(u) = uid_value.as_deref() {
+                                                        persist_session(&fresh_token, u, &rt);
+                                                    }
+                                                    refresh_token.set(Some(rt));
+                                                }
+                                                if let Some(u) = uid_value {
+                                                    if let Err(e) = put_user_theme(&fresh_token, &u, &selected).await {
+                                                        status.set(e);
+                                                        return;
+                                                    }
+                                                }
+                                                let _ = LocalStorage::set(THEME_KEY, selected);
+                                            }
+                                            Err(e) => status.set(e),
+                                        }
+                                    });
                                 })
                             }}
                         >
                             <option value="dark">{"Dark"}</option>
                             <option value="light">{"Light"}</option>
+                            <option value="pink">{"Pink"}</option>
                         </select>
                     </label>
                     <button class="text-button" type="button" onclick={logout}>{"Logout"}</button>
@@ -714,9 +857,10 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
 
 #[function_component(App)]
 fn app() -> Html {
-    let (stored_token, stored_uid) = stored_auth();
+    let (stored_token, stored_uid, stored_refresh) = stored_auth();
     let token = use_state(|| stored_token);
     let uid = use_state(|| stored_uid);
+    let refresh_token = use_state(|| stored_refresh);
     let workouts = use_state(|| LocalStorage::get::<Vec<Workout>>(LOCAL).unwrap_or_default());
     let exercise_catalog = use_state(Vec::<String>::new);
     let exercise_aliases = use_state(HashMap::<String, String>::new);
@@ -725,8 +869,8 @@ fn app() -> Html {
     let password = use_state(String::new);
     let signup = use_state(|| false);
     let active_tab = use_state(|| "workout".to_string());
-    let theme = use_state(|| LocalStorage::get(THEME_KEY).unwrap_or_else(|_| "dark".to_string()));
-    let date = use_state(|| "2026-07-30".to_string());
+    let theme = use_state(|| "dark".to_string());
+    let date = use_state(today_string);
     let note = use_state(String::new);
     let name = use_state(String::new);
     let new_exercise_name = use_state(String::new);
@@ -741,30 +885,81 @@ fn app() -> Html {
     {
         let token = token.clone();
         let uid = uid.clone();
+        let refresh_token = refresh_token.clone();
         let workouts = workouts.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
+        let theme = theme.clone();
         let status = status.clone();
         use_effect_with((), move |_| {
             if let (Some(access_token), Some(user_id)) = ((*token).clone(), (*uid).clone()) {
                 let token = token.clone();
                 let uid = uid.clone();
+                let refresh_token = refresh_token.clone();
                 let workouts = workouts.clone();
                 let exercise_catalog = exercise_catalog.clone();
                 let exercise_aliases = exercise_aliases.clone();
+                let theme = theme.clone();
                 let status = status.clone();
                 spawn_local(async move {
+                    let mut access_token = access_token;
+                    let mut refresh_token_value = (*refresh_token).clone();
+                    if let Some(rt) = refresh_token_value.clone() {
+                        match refresh_session(&rt).await {
+                            Ok(a) => {
+                                let Some(next_token) = auth_token(&a) else {
+                                    clear_auth();
+                                    token.set(None);
+                                    uid.set(None);
+                                    refresh_token.set(None);
+                                    status.set(
+                                        "Supabase did not return a refreshed session token.".into(),
+                                    );
+                                    return;
+                                };
+                                let Some(next_uid) = auth_user_id(&a) else {
+                                    clear_auth();
+                                    token.set(None);
+                                    uid.set(None);
+                                    refresh_token.set(None);
+                                    status
+                                        .set("Supabase did not return a refreshed user id.".into());
+                                    return;
+                                };
+                                refresh_token_value =
+                                    auth_refresh_token(&a).or(Some(rt)).or(refresh_token_value);
+                                if let Some(current_refresh) = refresh_token_value.as_deref() {
+                                    persist_session(&next_token, &next_uid, current_refresh);
+                                }
+                                access_token = next_token;
+                                token.set(Some(access_token.clone()));
+                                uid.set(Some(next_uid.clone()));
+                                refresh_token.set(refresh_token_value.clone());
+                            }
+                            Err(e) => {
+                                clear_auth();
+                                token.set(None);
+                                uid.set(None);
+                                refresh_token.set(None);
+                                status.set(e);
+                                return;
+                            }
+                        }
+                    }
                     match sync_user_data(&access_token, &user_id).await {
-                        Ok((merged, catalog_names, alias_map)) => {
+                        Ok((merged, catalog_names, alias_map, saved_theme)) => {
                             workouts.set(merged);
                             exercise_catalog.set(catalog_names);
                             exercise_aliases.set(alias_map);
+                            theme.set(saved_theme.clone());
+                            let _ = LocalStorage::set(THEME_KEY, saved_theme);
                             status.set(String::new());
                         }
                         Err(e) => {
                             clear_auth();
                             token.set(None);
                             uid.set(None);
+                            refresh_token.set(None);
                             status.set(e);
                         }
                     }
@@ -808,9 +1003,11 @@ fn app() -> Html {
         let signup = signup.clone();
         let token = token.clone();
         let uid = uid.clone();
+        let refresh_token = refresh_token.clone();
         let workouts = workouts.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
+        let theme = theme.clone();
         let status = status.clone();
         Callback::from(move |e: SubmitEvent| {
             e.prevent_default();
@@ -819,9 +1016,11 @@ fn app() -> Html {
             let is_signup = *signup;
             let token = token.clone();
             let uid = uid.clone();
+            let refresh_token = refresh_token.clone();
             let workouts = workouts.clone();
             let exercise_catalog = exercise_catalog.clone();
             let exercise_aliases = exercise_aliases.clone();
+            let theme = theme.clone();
             let status = status.clone();
             spawn_local(async move {
                 status.set("Connecting…".into());
@@ -845,20 +1044,28 @@ fn app() -> Html {
                             status.set("Signed in, but Supabase did not return a user id.".into());
                             return;
                         };
-                        let _ = LocalStorage::set(AUTH_TOKEN_KEY, access_token.clone());
-                        let _ = LocalStorage::set(AUTH_UID_KEY, user_id.clone());
+                        let refresh = auth_refresh_token(&a).unwrap_or_default();
+                        if refresh.is_empty() {
+                            status.set("Supabase did not return a refresh token.".into());
+                            return;
+                        }
+                        persist_session(&access_token, &user_id, &refresh);
                         token.set(Some(access_token.clone()));
                         uid.set(Some(user_id.clone()));
+                        refresh_token.set(Some(refresh.clone()));
                         let workouts = workouts.clone();
                         let exercise_catalog = exercise_catalog.clone();
                         let exercise_aliases = exercise_aliases.clone();
+                        let theme = theme.clone();
                         let status = status.clone();
                         spawn_local(async move {
                             match sync_user_data(&access_token, &user_id).await {
-                                Ok((merged, catalog_names, alias_map)) => {
+                                Ok((merged, catalog_names, alias_map, saved_theme)) => {
                                     workouts.set(merged);
                                     exercise_catalog.set(catalog_names);
                                     exercise_aliases.set(alias_map);
+                                    theme.set(saved_theme.clone());
+                                    let _ = LocalStorage::set(THEME_KEY, saved_theme);
                                     status.set(String::new());
                                 }
                                 Err(e) => status.set(e),
@@ -1048,8 +1255,9 @@ fn app() -> Html {
         })
     };
     let save = {
-        let token = token.clone();
-        let uid = uid.clone();
+        let token_handle = token.clone();
+        let uid_handle = uid.clone();
+        let refresh_handle = refresh_token.clone();
         let workouts = workouts.clone();
         let date = date.clone();
         let note = note.clone();
@@ -1072,24 +1280,39 @@ fn app() -> Html {
                 note: (*note).clone(),
                 exercises: (*draft).clone(),
             };
-            let token = (*token).clone();
-            let uid = (*uid).clone();
+            let token = (*token_handle).clone();
+            let uid = (*uid_handle).clone();
+            let refresh_token = (*refresh_handle).clone();
             let workouts = workouts.clone();
+            let token_state = token_handle.clone();
+            let uid_state = uid_handle.clone();
+            let refresh_state = refresh_handle.clone();
             let status = status.clone();
             let reset_editor = reset_editor.clone();
             spawn_local(async move {
-                if let (Some(t), Some(u)) = (token, uid) {
-                    match put_workout(&t, &u, &w).await {
-                        Ok(()) => {
-                            let mut all = (*workouts).clone();
-                            if let Some(id) = previous_id.as_ref() {
-                                all.retain(|existing| existing.id != *id);
+                if let (Some(u), Some(t)) = (uid, token) {
+                    match current_access_token(Some(t), refresh_token).await {
+                        Ok((fresh_token, next_refresh)) => {
+                            match put_workout(&fresh_token, &u, &w).await {
+                                Ok(()) => {
+                                    let mut all = (*workouts).clone();
+                                    if let Some(id) = previous_id.as_ref() {
+                                        all.retain(|existing| existing.id != *id);
+                                    }
+                                    all.insert(0, w);
+                                    let _ = LocalStorage::set(LOCAL, &all);
+                                    workouts.set(all);
+                                    token_state.set(Some(fresh_token.clone()));
+                                    if let Some(rt) = next_refresh {
+                                        persist_session(&fresh_token, &u, &rt);
+                                        refresh_state.set(Some(rt));
+                                    }
+                                    uid_state.set(Some(u.clone()));
+                                    reset_editor.emit(());
+                                    status.set("Workout saved to Supabase.".into())
+                                }
+                                Err(e) => status.set(e),
                             }
-                            all.insert(0, w);
-                            let _ = LocalStorage::set(LOCAL, &all);
-                            workouts.set(all);
-                            reset_editor.emit(());
-                            status.set("Workout saved to Supabase.".into())
                         }
                         Err(e) => status.set(e),
                     }
@@ -1098,24 +1321,40 @@ fn app() -> Html {
         })
     };
     let delete_selected = {
-        let token = token.clone();
-        let uid = uid.clone();
+        let token_handle = token.clone();
+        let uid_handle = uid.clone();
+        let refresh_handle = refresh_token.clone();
         let workouts = workouts.clone();
         let status = status.clone();
         Callback::from(move |id: String| {
-            let token = (*token).clone();
-            let uid = (*uid).clone();
+            let token = (*token_handle).clone();
+            let uid = (*uid_handle).clone();
+            let refresh_token = (*refresh_handle).clone();
             let workouts = workouts.clone();
             let status = status.clone();
+            let token_state = token_handle.clone();
+            let uid_state = uid_handle.clone();
+            let refresh_state = refresh_handle.clone();
             spawn_local(async move {
-                if let (Some(t), Some(u)) = (token, uid) {
-                    match delete_workout(&t, &u, &id).await {
-                        Ok(()) => {
-                            let mut next = (*workouts).clone();
-                            next.retain(|w| w.id != id);
-                            let _ = LocalStorage::set(LOCAL, &next);
-                            workouts.set(next);
-                            status.set("Workout deleted.".into());
+                if let (Some(u), Some(t)) = (uid, token) {
+                    match current_access_token(Some(t), refresh_token).await {
+                        Ok((fresh_token, next_refresh)) => {
+                            match delete_workout(&fresh_token, &u, &id).await {
+                                Ok(()) => {
+                                    let mut next = (*workouts).clone();
+                                    next.retain(|w| w.id != id);
+                                    let _ = LocalStorage::set(LOCAL, &next);
+                                    workouts.set(next);
+                                    token_state.set(Some(fresh_token.clone()));
+                                    if let Some(rt) = next_refresh {
+                                        persist_session(&fresh_token, &u, &rt);
+                                        refresh_state.set(Some(rt));
+                                    }
+                                    uid_state.set(Some(u.clone()));
+                                    status.set("Workout deleted.".into());
+                                }
+                                Err(e) => status.set(e),
+                            }
                         }
                         Err(e) => status.set(e),
                     }
@@ -1198,8 +1437,12 @@ fn app() -> Html {
             {workout_editor_view(WorkoutEditorProps {
                 date,
                 name,
-        weight,
-        reps,
+                theme,
+                token,
+                uid,
+                refresh_token,
+                weight,
+                reps,
                 set_reps,
                 details,
                 show_new_exercise,
@@ -1216,7 +1459,6 @@ fn app() -> Html {
                 delete_selected,
                 exercise_options,
                 active_tab,
-                theme,
             })}
         </>
     }

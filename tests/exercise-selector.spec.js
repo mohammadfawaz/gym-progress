@@ -40,6 +40,17 @@ async function mockSupabase(page, options = {}) {
       }
     }
 
+    if (pathname.endsWith('/user_settings')) {
+      if (method === 'GET') {
+        await route.fulfill(jsonResponse(options.userSettings ?? [{ theme: 'dark' }]));
+        return;
+      }
+      if (method === 'POST') {
+        await route.fulfill(jsonResponse([], 201));
+        return;
+      }
+    }
+
     if (pathname.endsWith('/workouts')) {
       if (method === 'GET') {
         await route.fulfill(jsonResponse(options.workouts ?? []));
@@ -94,6 +105,11 @@ test('loads the exercise catalog and defaults to a real exercise', async ({ page
   expect(options).not.toContain('Choose an exercise');
   await expect(page.getByRole('button', { name: 'History' })).toBeVisible();
   await expect(page.getByText('Workout history')).not.toBeVisible();
+  await expect(page.getByTestId('theme-select').locator('option')).toHaveText([
+    'Dark',
+    'Light',
+    'Pink',
+  ]);
 });
 
 test('switches workout history into its own tab', async ({ page }) => {
