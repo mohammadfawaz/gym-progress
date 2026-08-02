@@ -614,6 +614,7 @@ struct WorkoutEditorProps {
     date: UseStateHandle<String>,
     name: UseStateHandle<String>,
     theme: UseStateHandle<String>,
+    theme_select_ref: NodeRef,
     token: UseStateHandle<Option<String>>,
     uid: UseStateHandle<Option<String>>,
     refresh_token: UseStateHandle<Option<String>>,
@@ -642,6 +643,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         date,
         name,
         theme,
+        theme_select_ref,
         token,
         uid,
         refresh_token,
@@ -677,6 +679,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                     <label class="theme-picker">
                         <span class="sr-only">{"Theme"}</span>
                         <select
+                            ref={theme_select_ref.clone()}
                             data-testid="theme-select"
                             value={(*theme).clone()}
                             onchange={{
@@ -879,6 +882,7 @@ fn app() -> Html {
     let signup = use_state(|| false);
     let active_tab = use_state(|| "workout".to_string());
     let theme = use_state(stored_theme);
+    let theme_select_ref = use_node_ref();
     let date = use_state(today_string);
     let note = use_state(String::new);
     let name = use_state(String::new);
@@ -973,6 +977,16 @@ fn app() -> Html {
                         }
                     }
                 });
+            }
+            || ()
+        });
+    }
+    {
+        let theme = theme.clone();
+        let theme_select_ref = theme_select_ref.clone();
+        use_effect_with((*theme).clone(), move |current_theme| {
+            if let Some(select) = theme_select_ref.cast::<HtmlSelectElement>() {
+                select.set_value(current_theme);
             }
             || ()
         });
@@ -1450,6 +1464,7 @@ fn app() -> Html {
                 date,
                 name,
                 theme,
+                theme_select_ref,
                 token,
                 uid,
                 refresh_token,
