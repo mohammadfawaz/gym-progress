@@ -323,14 +323,6 @@ fn stored_auth() -> (Option<String>, Option<String>, Option<String>) {
         LocalStorage::get(AUTH_REFRESH_KEY).ok(),
     )
 }
-fn stored_theme() -> String {
-    match LocalStorage::get::<String>(THEME_KEY).ok().as_deref() {
-        Some("dark") | None => "dark".into(),
-        Some("light") => "light".into(),
-        Some("pink") => "pink".into(),
-        Some(_) => "dark".into(),
-    }
-}
 fn clear_auth() {
     let _ = LocalStorage::delete(AUTH_TOKEN_KEY);
     let _ = LocalStorage::delete(AUTH_UID_KEY);
@@ -877,7 +869,7 @@ fn app() -> Html {
     let password = use_state(String::new);
     let signup = use_state(|| false);
     let active_tab = use_state(|| "workout".to_string());
-    let theme = use_state(stored_theme);
+    let theme = use_state(|| "dark".to_string());
     let date = use_state(today_string);
     let note = use_state(String::new);
     let name = use_state(String::new);
@@ -960,7 +952,6 @@ fn app() -> Html {
                             exercise_catalog.set(catalog_names);
                             exercise_aliases.set(alias_map);
                             theme.set(saved_theme.clone());
-                            let _ = LocalStorage::set(THEME_KEY, saved_theme);
                             status.set(String::new());
                         }
                         Err(e) => {
@@ -1073,7 +1064,6 @@ fn app() -> Html {
                                     exercise_catalog.set(catalog_names);
                                     exercise_aliases.set(alias_map);
                                     theme.set(saved_theme.clone());
-                                    let _ = LocalStorage::set(THEME_KEY, saved_theme);
                                     status.set(String::new());
                                 }
                                 Err(e) => status.set(e),

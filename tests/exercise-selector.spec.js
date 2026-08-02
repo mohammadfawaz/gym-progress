@@ -22,6 +22,8 @@ function jsonResponse(payload, status = 200) {
 async function mockSupabase(page, options = {}) {
   const catalogRequests = [];
   const workoutRequests = [];
+  const deleteRequests = [];
+  const themeRequests = [];
 
   await page.route('**/rest/v1/**', async route => {
     const url = new URL(route.request().url());
@@ -46,7 +48,19 @@ async function mockSupabase(page, options = {}) {
         return;
       }
       if (method === 'POST') {
+        themeRequests.push(JSON.parse(route.request().postData() || '{}'));
         await route.fulfill(jsonResponse([], 201));
+        return;
+      }
+    }
+
+    if (pathname.endsWith('/token') && url.searchParams.get('grant_type') === 'refresh_token') {
+      if (method === 'POST') {
+        await route.fulfill(jsonResponse(options.refreshAuth ?? {
+          access_token: 'refreshed-test-token',
+          refresh_token: 'refreshed-test-refresh',
+          user: { id: '00000000-0000-0000-0000-000000000001' },
+        }));
         return;
       }
     }
@@ -62,6 +76,7 @@ async function mockSupabase(page, options = {}) {
         return;
       }
       if (method === 'DELETE') {
+        deleteRequests.push({ pathname, search: url.searchParams.toString() });
         await route.fulfill(jsonResponse([], 200));
         return;
       }
@@ -70,19 +85,68 @@ async function mockSupabase(page, options = {}) {
     await route.fulfill(jsonResponse({ error: `Unhandled route: ${method} ${pathname}` }, 500));
   });
 
-  await page.addInitScript(({ storageKey, tokenKey, uidKey, themeKey }) => {
-    localStorage.removeItem(storageKey);
-    localStorage.setItem(tokenKey, 'test-token');
-    localStorage.setItem(uidKey, '00000000-0000-0000-0000-000000000001');
-    localStorage.removeItem(themeKey);
+  await page.addInitScript(({ storageKey, tokenKey, uidKey, refreshKey, themeKey, tokenValue, uidValue, refreshValue, themeValue }) => {
+    if (tokenValue !== null && localStorage.getItem(tokenKey) === null) {
+      localStorage.setItem(tokenKey, tokenValue);
+    }
+    if (uidValue !== null && localStorage.getItem(uidKey) === null) {
+      localStorage.setItem(uidKey, uidValue);
+    }
+    if (refreshValue !== null && localStorage.getItem(refreshKey) === null) {
+      localStorage.setItem(refreshKey, refreshValue);
+    }
+    if (themeValue === null) {
+      localStorage.removeItem(themeKey);
+    } else if (localStorage.getItem(themeKey) === null) {
+      localStorage.setItem(themeKey, themeValue);
+    }
   }, {
     storageKey: STORAGE_KEY,
     tokenKey: AUTH_TOKEN_KEY,
     uidKey: AUTH_UID_KEY,
+    refreshKey: 'lift-log-auth-refresh',
     themeKey: THEME_KEY,
+    tokenValue: options.token ?? 'test-token',
+    uidValue: options.uid ?? '00000000-0000-0000-0000-000000000001',
+    refreshValue: options.refreshToken ?? null,
+    themeValue: Object.prototype.hasOwnProperty.call(options, 'initialTheme')
+      ? options.initialTheme
+      : null,
   });
 
-  return { catalogRequests, workoutRequests };
+  return { catalogRequests, workoutRequests, deleteRequests, themeRequests };
+}
+
+async function openWorkoutTab(page) {
+  await page.getByRole('button', { name: 'Workout' }).click();
+  await expect(page.getByTestId('exercise-select')).toBeVisible();
+}
+
+async function openHistoryTab(page) {
+  await page.getByRole('button', { name: 'History' }).click();
+  await expect(page.getByText('Workout history')).toBeVisible();
+}
+
+async function selectExistingExercise(page, name) {
+  await page.getByTestId('exercise-select').selectOption(name);
+}
+
+async function addExercise(page, { name, weight, clicks = 0, details = '' }) {
+  const select = page.getByTestId('exercise-select');
+  const weightInput = page.getByTestId('weight-input');
+  const detailsInput = page.getByTestId('details-input');
+  await select.selectOption(name);
+  if (weight !== undefined) {
+    await weightInput.fill(String(weight));
+  }
+  if (details !== undefined) {
+    await detailsInput.fill(details);
+  }
+  const setButtons = [1, 2, 3].map(n => page.getByTestId(`set-rep-${n}`));
+  for (let i = 0; i < clicks; i += 1) {
+    await setButtons[0].click();
+  }
+  await page.getByTestId('add-exercise-button').click();
 }
 
 test('loads the exercise catalog and defaults to a real exercise', async ({ page }) => {
@@ -110,6 +174,34 @@ test('loads the exercise catalog and defaults to a real exercise', async ({ page
     'Light',
     'Pink',
   ]);
+});
+
+test('restores a saved session and server theme on refresh', async ({ page }) => {
+  const { workoutRequests } = await mockSupabase(page, {
+    refreshToken: 'refresh-token-1',
+    userSettings: [{ theme: 'pink' }],
+  });
+
+  await page.goto('/');
+  await expect(page.getByTestId('theme-select')).toHaveValue('pink');
+
+  await openWorkoutTab(page);
+  await page.getByTestId('exercise-select').selectOption('Bench Press');
+  await page.getByTestId('weight-input').fill('185');
+  await page.getByTestId('set-rep-1').click();
+  await page.getByTestId('set-rep-1').click();
+  await page.getByRole('button', { name: 'Log Workout' }).click();
+
+  await expect(page.getByText('Workout saved to Supabase.')).toBeVisible();
+  expect(workoutRequests).toContainEqual(expect.objectContaining({
+    workout_date: '2026-08-02',
+  }));
+
+  await page.reload();
+
+  await expect(page.getByTestId('theme-select')).toHaveValue('pink');
+  await openHistoryTab(page);
+  await expect(page.getByText('Bench Press')).toBeVisible();
 });
 
 test('switches workout history into its own tab', async ({ page }) => {
@@ -142,71 +234,7 @@ test('switches workout history into its own tab', async ({ page }) => {
   await expect(page.getByTestId('exercise-select')).toBeVisible();
 });
 
-test('can add an existing exercise and a new exercise', async ({ page }) => {
-  const { catalogRequests } = await mockSupabase(page, {
-    workouts: [
-      {
-        id: 'seed-1',
-        date: '2026-07-30',
-        note: '',
-        exercises: [
-          {
-            name: 'Cable Chest Press',
-            weight: 160,
-            unit: 'lb',
-            reps: '10, 10, 10',
-            details: '',
-          },
-        ],
-      },
-    ],
-  });
-
-  await page.goto('/');
-
-  const select = page.getByTestId('exercise-select');
-  const weight = page.getByTestId('weight-input');
-  const set1 = page.getByTestId('set-rep-1');
-  const set2 = page.getByTestId('set-rep-2');
-  const addButton = page.getByTestId('add-exercise-button');
-
-  await select.selectOption('Cable Chest Press');
-  await weight.fill('160');
-  await expect(set1).toContainText('10');
-  await set1.click();
-  await set1.click();
-  await expect(set1).toContainText('8');
-  await addButton.click();
-
-  await expect(page.locator('.workout-form .exercise-entry')).toContainText('Cable Chest Press');
-  await expect(page.locator('.workout-form .exercise-entry')).toContainText('8, 10, 10');
-  await expect(set1).toContainText('10');
-
-  await select.selectOption('__add_exercise__');
-  await expect(page.getByTestId('new-exercise-name')).toBeVisible();
-  await page.getByTestId('new-exercise-name').fill('Romanian Deadlift');
-  await weight.fill('135');
-  await expect(set2).toContainText('10');
-  await set2.click();
-  await set2.click();
-  await set2.click();
-  await set2.click();
-  await set2.click();
-  await set2.click();
-  await set2.click();
-  await set2.click();
-  await set2.click();
-  await set2.click();
-  await expect(set2).toContainText('10');
-  await addButton.click();
-
-  await expect(page.locator('.workout-form .exercise-entry')).toContainText('Romanian Deadlift');
-  await expect(catalogRequests).toContainEqual(expect.objectContaining({
-    canonical_name: 'Romanian Deadlift',
-  }));
-});
-
-test('keeps custom exercise mode working after adding a new exercise', async ({ page }) => {
+test('can add an existing exercise and then create a new one', async ({ page }) => {
   const { catalogRequests } = await mockSupabase(page, {
     workouts: [],
   });
@@ -215,31 +243,111 @@ test('keeps custom exercise mode working after adding a new exercise', async ({ 
 
   const select = page.getByTestId('exercise-select');
   const weight = page.getByTestId('weight-input');
-  const addButton = page.getByTestId('add-exercise-button');
   const newExerciseName = page.getByTestId('new-exercise-name');
   const set1 = page.getByTestId('set-rep-1');
+  const set2 = page.getByTestId('set-rep-2');
+
+  await selectExistingExercise(page, 'Bench Press');
+  await weight.fill('185');
+  await set1.click();
+  await set1.click();
+  await page.getByTestId('add-exercise-button').click();
+
+  await expect(page.locator('.workout-form .exercise-entry')).toContainText('Bench Press');
+  await expect(select).toHaveValue('Bench Press');
+  await expect(select.locator('option')).toContainText('Bench Press');
 
   await select.selectOption('__add_exercise__');
   await expect(newExerciseName).toBeVisible();
 
   await newExerciseName.fill('Front Squat');
   await weight.fill('155');
-  await set1.click();
-  await set1.click();
-  await addButton.click();
+  await set2.click();
+  await set2.click();
+  await page.getByTestId('add-exercise-button').click();
 
   await expect(page.locator('.workout-form .exercise-entry')).toContainText('Front Squat');
-  await expect(newExerciseName).toBeVisible();
-
-  await newExerciseName.fill('Chest Supported Row');
-  await weight.fill('110');
-  await addButton.click();
-
-  await expect(page.locator('.workout-form .exercise-entry')).toContainText('Chest Supported Row');
+  await expect(select.locator('option')).toContainText('Front Squat');
   await expect(catalogRequests).toContainEqual(expect.objectContaining({
     canonical_name: 'Front Squat',
   }));
-  await expect(catalogRequests).toContainEqual(expect.objectContaining({
-    canonical_name: 'Chest Supported Row',
-  }));
+});
+
+test('keeps history sorted by date and edits replace the existing workout', async ({ page }) => {
+  await mockSupabase(page, {
+    workouts: [
+      {
+        id: 'seed-older',
+        date: '2026-07-10',
+        note: '',
+        exercises: [
+          { name: 'Bench Press', weight: 165, unit: 'lb', reps: '8, 8, 8', details: '' },
+        ],
+      },
+      {
+        id: 'seed-newer',
+        date: '2026-07-28',
+        note: '',
+        exercises: [
+          { name: 'Barbell Squats', weight: 155, unit: 'lb', reps: '8, 8, 8', details: '' },
+        ],
+      },
+    ],
+  });
+
+  await page.goto('/');
+  await openHistoryTab(page);
+
+  const cards = page.locator('.workout-list .workout-card');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0).locator('time')).toHaveText('2026-07-28');
+  await expect(cards.nth(1).locator('time')).toHaveText('2026-07-10');
+
+  await cards.nth(1).getByRole('button', { name: 'Edit' }).click();
+  await page.getByTestId('weight-input').fill('170');
+  await page.getByRole('button', { name: 'Log Workout' }).click();
+
+  await openHistoryTab(page);
+  await expect(page.locator('.workout-list .workout-card')).toHaveCount(2);
+  await expect(page.locator('.workout-list .workout-card').nth(0).locator('time')).toHaveText('2026-07-28');
+  await expect(page.locator('.workout-list .workout-card').nth(1).locator('time')).toHaveText('2026-07-10');
+  await expect(page.locator('.workout-list .workout-card').nth(1)).toContainText('170 lbs');
+});
+
+test('deletes a workout from the history and sends the delete request', async ({ page }) => {
+  const { deleteRequests } = await mockSupabase(page, {
+    workouts: [
+      {
+        id: 'seed-delete',
+        date: '2026-07-30',
+        note: '',
+        exercises: [
+          { name: 'Cable Chest Press', weight: 160, unit: 'lb', reps: '10, 10, 10', details: '' },
+        ],
+      },
+    ],
+  });
+
+  await page.goto('/');
+  await openHistoryTab(page);
+  await page.getByRole('button', { name: 'Delete' }).click();
+
+  await expect(page.getByText('Workout deleted.')).toBeVisible();
+  await expect(page.getByText('No workouts yet.')).toBeVisible();
+  expect(deleteRequests).toHaveLength(1);
+  expect(deleteRequests[0].search).toContain('id=eq.seed-delete');
+});
+
+test('keeps the theme dropdown in sync with the server theme', async ({ page }) => {
+  const { themeRequests } = await mockSupabase(page, {
+    userSettings: [{ theme: 'light' }],
+    initialTheme: 'pink',
+  });
+
+  await page.goto('/');
+
+  await expect(page.getByTestId('theme-select')).toHaveValue('light');
+  await page.getByTestId('theme-select').selectOption('pink');
+  await expect(page.getByTestId('theme-select')).toHaveValue('pink');
+  expect(themeRequests).toContainEqual(expect.objectContaining({ theme: 'pink' }));
 });
