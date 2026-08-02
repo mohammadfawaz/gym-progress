@@ -10,7 +10,7 @@ module.exports = defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'trunk serve --release --port 8080 --address 127.0.0.1',
+    command: 'sh -c "trunk build --release --public-url / && python3 -m http.server 8080 --bind 127.0.0.1 --directory dist"',
     url: 'http://127.0.0.1:8080',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
