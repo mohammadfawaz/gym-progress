@@ -124,6 +124,14 @@ fn auth_user_id(auth: &Auth) -> Option<String> {
             .and_then(|session| session.user.as_ref().map(|user| user.id.clone()))
     })
 }
+fn stored_theme() -> String {
+    match LocalStorage::get::<String>(THEME_KEY).ok().as_deref() {
+        Some("dark") => "dark".into(),
+        Some("light") => "light".into(),
+        Some("pink") => "pink".into(),
+        Some(_) | None => "dark".into(),
+    }
+}
 fn persist_session(access_token: &str, user_id: &str, refresh_token: &str) {
     let _ = LocalStorage::set(AUTH_TOKEN_KEY, access_token.to_string());
     let _ = LocalStorage::set(AUTH_UID_KEY, user_id.to_string());
@@ -414,6 +422,7 @@ async fn sync_user_data(
     );
     let merged = merge_workouts(remote, local);
     let _ = LocalStorage::set(LOCAL, &merged);
+    let _ = LocalStorage::set(THEME_KEY, theme.clone());
     for w in &merged {
         let _ = put_workout(access_token, user_id, w).await;
     }
@@ -869,7 +878,7 @@ fn app() -> Html {
     let password = use_state(String::new);
     let signup = use_state(|| false);
     let active_tab = use_state(|| "workout".to_string());
-    let theme = use_state(|| "dark".to_string());
+    let theme = use_state(stored_theme);
     let date = use_state(today_string);
     let note = use_state(String::new);
     let name = use_state(String::new);
@@ -952,6 +961,7 @@ fn app() -> Html {
                             exercise_catalog.set(catalog_names);
                             exercise_aliases.set(alias_map);
                             theme.set(saved_theme.clone());
+                            let _ = LocalStorage::set(THEME_KEY, saved_theme);
                             status.set(String::new());
                         }
                         Err(e) => {
@@ -1064,6 +1074,7 @@ fn app() -> Html {
                                     exercise_catalog.set(catalog_names);
                                     exercise_aliases.set(alias_map);
                                     theme.set(saved_theme.clone());
+                                    let _ = LocalStorage::set(THEME_KEY, saved_theme);
                                     status.set(String::new());
                                 }
                                 Err(e) => status.set(e),
