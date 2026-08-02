@@ -323,6 +323,14 @@ fn stored_auth() -> (Option<String>, Option<String>, Option<String>) {
         LocalStorage::get(AUTH_REFRESH_KEY).ok(),
     )
 }
+fn stored_theme() -> String {
+    match LocalStorage::get::<String>(THEME_KEY).ok().as_deref() {
+        Some("dark") | None => "dark".into(),
+        Some("light") => "light".into(),
+        Some("pink") => "pink".into(),
+        Some(_) => "dark".into(),
+    }
+}
 fn clear_auth() {
     let _ = LocalStorage::delete(AUTH_TOKEN_KEY);
     let _ = LocalStorage::delete(AUTH_UID_KEY);
@@ -466,7 +474,7 @@ fn merge_workouts(mut primary: Vec<Workout>, secondary: Vec<Workout>) -> Vec<Wor
             merged.push(workout);
         }
     }
-    merged.sort_by(|a, b| b.date.cmp(&a.date));
+    merged.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id)));
     merged
 }
 fn workout_view(
@@ -869,7 +877,7 @@ fn app() -> Html {
     let password = use_state(String::new);
     let signup = use_state(|| false);
     let active_tab = use_state(|| "workout".to_string());
-    let theme = use_state(|| "dark".to_string());
+    let theme = use_state(stored_theme);
     let date = use_state(today_string);
     let note = use_state(String::new);
     let name = use_state(String::new);
@@ -1299,7 +1307,10 @@ fn app() -> Html {
                                     if let Some(id) = previous_id.as_ref() {
                                         all.retain(|existing| existing.id != *id);
                                     }
-                                    all.insert(0, w);
+                                    all.push(w);
+                                    all.sort_by(|a, b| {
+                                        b.date.cmp(&a.date).then_with(|| a.id.cmp(&b.id))
+                                    });
                                     let _ = LocalStorage::set(LOCAL, &all);
                                     workouts.set(all);
                                     token_state.set(Some(fresh_token.clone()));

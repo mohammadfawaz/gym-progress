@@ -38,6 +38,12 @@ on conflict (canonical_name) do update
   set aliases = excluded.aliases,
       sort_order = excluded.sort_order;
 
+with target_user as (
+  select id as user_id
+  from auth.users
+  where email = 'mohammadfawaz89@gmail.com'
+  limit 1
+)
 insert into public.workouts (id, user_id, workout_date, note, exercises)
 values
   (
@@ -228,6 +234,12 @@ on conflict (user_id, id) do update
       note = excluded.note,
       exercises = excluded.exercises;
 
+with target_user as (
+  select id as user_id
+  from auth.users
+  where email = 'mohammadfawaz89@gmail.com'
+  limit 1
+)
 update public.workouts
 set exercises = (
   select coalesce(
