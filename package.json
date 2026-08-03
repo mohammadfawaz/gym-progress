@@ -2,7 +2,7 @@
   "name": "lift-log-e2e",
   "private": true,
   "devDependencies": {
-    "@playwright/test": "^1.55.0"
+    "@playwright/test": "1.55.0"
   },
   "scripts": {
     "test:e2e": "playwright test"

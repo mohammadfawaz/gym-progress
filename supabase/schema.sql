@@ -5,6 +5,7 @@ create table if not exists public.workouts (
   note text not null default '',
   exercises jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   primary key (user_id, id)
 );
 
@@ -21,6 +22,7 @@ create policy "Users can delete their own workouts" on public.workouts for delet
 
 create table if not exists public.exercise_catalog (
   canonical_name text primary key,
+  created_by uuid references auth.users(id) on delete cascade,
   aliases text[] not null default '{}'::text[],
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
@@ -29,11 +31,11 @@ create table if not exists public.exercise_catalog (
 alter table public.exercise_catalog enable row level security;
 
 drop policy if exists "Users can read the exercise catalog" on public.exercise_catalog;
-create policy "Users can read the exercise catalog" on public.exercise_catalog for select using (true);
+create policy "Users can read the exercise catalog" on public.exercise_catalog for select using (created_by is null or created_by = auth.uid());
 drop policy if exists "Users can add exercises" on public.exercise_catalog;
-create policy "Users can add exercises" on public.exercise_catalog for insert with check (auth.role() = 'authenticated');
+create policy "Users can add exercises" on public.exercise_catalog for insert with check (created_by = auth.uid());
 drop policy if exists "Users can update exercises" on public.exercise_catalog;
-create policy "Users can update exercises" on public.exercise_catalog for update using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+create policy "Users can update exercises" on public.exercise_catalog for update using (created_by = auth.uid()) with check (created_by = auth.uid());
 
 create table if not exists public.user_settings (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -50,6 +52,24 @@ drop policy if exists "Users can insert their own settings" on public.user_setti
 create policy "Users can insert their own settings" on public.user_settings for insert with check (auth.uid() = user_id);
 drop policy if exists "Users can update their own settings" on public.user_settings;
 create policy "Users can update their own settings" on public.user_settings for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists workouts_set_updated_at on public.workouts;
+create trigger workouts_set_updated_at before update on public.workouts
+for each row execute function public.set_updated_at();
+
+drop trigger if exists user_settings_set_updated_at on public.user_settings;
+create trigger user_settings_set_updated_at before update on public.user_settings
+for each row execute function public.set_updated_at();
 
 create or replace function public.canonical_exercise_name(input_name text)
 returns text

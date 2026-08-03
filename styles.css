@@ -79,6 +79,11 @@ button {
   justify-content: space-between;
   gap: 16px;
 }
+.entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .topbar {
   margin-bottom: 26px;
 }
