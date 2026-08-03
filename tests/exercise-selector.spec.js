@@ -32,7 +32,9 @@ async function mockSupabase(page, options = {}) {
   const workoutRequests = [];
   const deleteRequests = [];
   const themeRequests = [];
+  const templateRequests = [];
   let workouts = [...(options.workouts ?? [])];
+  let templates = [...(options.templates ?? [])];
 
   await page.route("**/auth/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -88,6 +90,20 @@ async function mockSupabase(page, options = {}) {
       }
       if (method === "POST") {
         themeRequests.push(JSON.parse(route.request().postData() || "{}"));
+        await route.fulfill(jsonResponse([], 201));
+        return;
+      }
+    }
+
+    if (pathname.endsWith("/workout_templates")) {
+      if (method === "GET") {
+        await route.fulfill(jsonResponse(templates));
+        return;
+      }
+      if (method === "POST") {
+        const template = JSON.parse(route.request().postData() || "{}");
+        templateRequests.push(template);
+        templates.push(template);
         await route.fulfill(jsonResponse([], 201));
         return;
       }
@@ -165,7 +181,13 @@ async function mockSupabase(page, options = {}) {
     },
   );
 
-  return { catalogRequests, workoutRequests, deleteRequests, themeRequests };
+  return {
+    catalogRequests,
+    workoutRequests,
+    deleteRequests,
+    themeRequests,
+    templateRequests,
+  };
 }
 
 async function openWorkoutTab(page) {
@@ -395,8 +417,13 @@ test("keeps history sorted by date and edits replace the existing workout", asyn
     .locator(".exercise-entry")
     .getByRole("button", { name: "Edit" })
     .click();
+  await expect(page.locator(".workout-form .exercise-entry")).toHaveCount(1);
+  await expect(page.getByTestId("add-exercise-button")).toHaveText(
+    "Update Exercise",
+  );
   await page.getByTestId("weight-input").fill("170");
   await page.getByTestId("add-exercise-button").click();
+  await expect(page.locator(".workout-form .exercise-entry")).toHaveCount(1);
   await page.getByRole("button", { name: "Log Workout" }).click();
 
   await openHistoryTab(page);
@@ -436,12 +463,67 @@ test("deletes a workout from the history and sends the delete request", async ({
 
   await page.goto("/");
   await openHistoryTab(page);
+  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Delete" }).click();
 
   await expect(page.getByText("Workout deleted.")).toBeVisible();
   await expect(page.getByText("No workouts yet.")).toBeVisible();
   expect(deleteRequests).toHaveLength(1);
   expect(deleteRequests[0].search).toContain("id=eq.seed-delete");
+});
+
+test("filters exercises and repeats the last workout as a new draft", async ({
+  page,
+}) => {
+  await mockSupabase(page, {
+    workouts: [
+      {
+        id: "seed-repeat",
+        workout_date: "2026-07-30",
+        note: "Full body",
+        exercises: [
+          {
+            name: "Bench Press",
+            weight: 165,
+            reps: "8, 8, 8",
+            details: "Controlled",
+          },
+        ],
+      },
+    ],
+  });
+
+  await page.goto("/");
+  await page.getByTestId("exercise-search").fill("squat");
+  await expect(page.getByTestId("exercise-select").locator("option")).toHaveText([
+    "Barbell Squats",
+    "New Exercise",
+  ]);
+
+  await page.getByRole("button", { name: "Repeat last workout" }).click();
+  await expect(page.locator(".workout-form .exercise-entry")).toHaveCount(1);
+  await expect(page.locator(".workout-form .exercise-entry")).toContainText(
+    "Bench Press",
+  );
+  await expect(page.getByTestId("exercise-search")).toHaveValue("");
+});
+
+test("saves and loads a workout template", async ({ page }) => {
+  const { templateRequests } = await mockSupabase(page);
+  await page.goto("/");
+  await addExercise(page, { name: "Bench Press", weight: 185 });
+  await page.getByTestId("template-name").fill("Push Day");
+  await page.getByRole("button", { name: "Save template" }).click();
+
+  await expect(page.getByText("Workout template saved.")).toBeVisible();
+  expect(templateRequests).toHaveLength(1);
+  await expect(page.getByTestId("template-select")).toContainText("Push Day");
+
+  await page.getByTestId("template-select").selectOption({ label: "Push Day" });
+  await expect(page.getByText("Loaded template: Push Day")).toBeVisible();
+  await expect(page.locator(".workout-form .exercise-entry")).toContainText(
+    "Bench Press",
+  );
 });
 
 test("keeps the theme dropdown in sync with the server theme", async ({

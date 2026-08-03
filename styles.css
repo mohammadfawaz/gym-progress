@@ -380,6 +380,38 @@ h2 {
   border-radius: 18px;
   padding: 14px;
 }
+.repeat-button {
+  margin: -4px 0 14px;
+  text-align: left;
+}
+.template-controls {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.template-save-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.template-save-row input {
+  min-width: 0;
+  flex: 1;
+  background: var(--control-bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-radius: 10px;
+  min-height: 40px;
+  padding: 8px 10px;
+}
+.template-save-row .text-button {
+  white-space: nowrap;
+}
+.primary-button:disabled {
+  cursor: wait;
+  filter: saturate(0.6);
+  opacity: 0.75;
+}
 .grow {
   flex: 1;
 }

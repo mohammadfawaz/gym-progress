@@ -6,7 +6,12 @@ use web_sys::{HtmlInputElement, HtmlSelectElement};
 use yew::prelude::*;
 
 mod models;
-use models::{Auth, DbExerciseCatalog, DbUserSettings, DbWorkout, Exercise, Workout};
+mod sets;
+use models::{
+    Auth, DbExerciseCatalog, DbUserSettings, DbWorkout, DbWorkoutTemplate, Exercise, Workout,
+    WorkoutTemplate,
+};
+use sets::{defaults as default_set_reps, format as format_set_reps, parse as parse_set_reps};
 
 const URL: &str = "https://zhlsfzjhlnxztjklhmpi.supabase.co";
 const KEY: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpobHNmempobG54enRqa2xobXBpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0MTE1NjAsImV4cCI6MjEwMDk4NzU2MH0.5E-algHiQRS8dD18r0blom86gU88nFShahk6cAMnpqI";
@@ -141,6 +146,63 @@ async fn get_workouts(token: &str, uid: &str) -> Result<Vec<Workout>, String> {
             exercises: r.exercises,
         })
         .collect())
+}
+async fn get_workout_templates(token: &str, uid: &str) -> Result<Vec<WorkoutTemplate>, String> {
+    let url = format!(
+        "{URL}/rest/v1/workout_templates?select=id,name,note,exercises&user_id=eq.{uid}&order=name.asc"
+    );
+    let res = headers(Request::get(&url), Some(token))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.ok() {
+        return Err(res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Could not load workout templates".into()));
+    }
+    let rows: Vec<DbWorkoutTemplate> = res.json().await.map_err(|e| e.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|row| WorkoutTemplate {
+            id: row.id,
+            name: row.name,
+            note: row.note,
+            exercises: row.exercises,
+        })
+        .collect())
+}
+async fn put_workout_template(
+    token: &str,
+    uid: &str,
+    template: &WorkoutTemplate,
+) -> Result<(), String> {
+    let req = headers(
+        Request::post(&format!("{URL}/rest/v1/workout_templates")),
+        Some(token),
+    )
+    .header("Content-Type", "application/json");
+    let body = serde_json::json!({
+        "id": template.id,
+        "user_id": uid,
+        "name": template.name,
+        "note": template.note,
+        "exercises": template.exercises,
+    });
+    let res = req
+        .body(body.to_string())
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if res.ok() {
+        Ok(())
+    } else {
+        Err(res
+            .text()
+            .await
+            .unwrap_or_else(|_| "Could not save workout template".into()))
+    }
 }
 async fn get_exercise_catalog(token: &str) -> Result<Vec<DbExerciseCatalog>, String> {
     let url = format!(
@@ -315,24 +377,18 @@ fn clear_auth() {
 fn input_value(e: InputEvent) -> String {
     e.target_unchecked_into::<HtmlInputElement>().value()
 }
-fn default_set_reps() -> [u32; 3] {
-    [10, 10, 10]
-}
-fn parse_set_reps(reps: &str) -> [u32; 3] {
-    let mut slots = default_set_reps();
-    for (index, part) in reps.split(',').take(3).enumerate() {
-        if let Ok(value) = part.trim().parse::<u32>() {
-            slots[index] = value;
-        }
+fn save_draft_exercise(
+    draft: &UseStateHandle<Vec<Exercise>>,
+    editing_draft_index: &UseStateHandle<Option<usize>>,
+    exercise: Exercise,
+) {
+    let mut next = (**draft).clone();
+    match **editing_draft_index {
+        Some(index) if index < next.len() => next[index] = exercise,
+        _ => next.push(exercise),
     }
-    slots
-}
-fn format_set_reps(slots: &[u32; 3]) -> String {
-    slots
-        .iter()
-        .map(|value| value.to_string())
-        .collect::<Vec<_>>()
-        .join(", ")
+    draft.set(next);
+    editing_draft_index.set(None);
 }
 fn previous(workouts: &[Workout], name: &str) -> Option<Exercise> {
     workouts
@@ -379,7 +435,16 @@ fn build_catalog(rows: &[DbExerciseCatalog]) -> (Vec<String>, HashMap<String, St
 async fn sync_user_data(
     access_token: &str,
     user_id: &str,
-) -> Result<(Vec<Workout>, Vec<String>, HashMap<String, String>, String), String> {
+) -> Result<
+    (
+        Vec<Workout>,
+        Vec<String>,
+        HashMap<String, String>,
+        String,
+        Vec<WorkoutTemplate>,
+    ),
+    String,
+> {
     let catalog_rows = get_exercise_catalog(access_token).await?;
     let (catalog_names, alias_map) = build_catalog(&catalog_rows);
     let theme = get_user_theme(access_token, user_id)
@@ -389,9 +454,13 @@ async fn sync_user_data(
     // The database is authoritative. Local storage is only an account-scoped snapshot
     // for fast rendering, never a source that writes records back during sign-in.
     let remote = merge_workouts(remote, Vec::new());
+    // Templates are an enhancement. A missing migration must not block workouts.
+    let templates = get_workout_templates(access_token, user_id)
+        .await
+        .unwrap_or_default();
     cache_workouts(user_id, &remote);
     let _ = LocalStorage::set(THEME_KEY, theme.clone());
-    Ok((remote, catalog_names, alias_map, theme))
+    Ok((remote, catalog_names, alias_map, theme, templates))
 }
 fn canonicalize_workout(w: &Workout, aliases: &HashMap<String, String>) -> Workout {
     let mut next = w.clone();
@@ -602,14 +671,22 @@ struct WorkoutEditorProps {
     details: UseStateHandle<String>,
     show_new_exercise: UseStateHandle<bool>,
     draft: UseStateHandle<Vec<Exercise>>,
+    editing_draft_index: UseStateHandle<Option<usize>>,
     workouts: UseStateHandle<Vec<Workout>>,
+    templates: UseStateHandle<Vec<WorkoutTemplate>>,
     status: UseStateHandle<String>,
+    is_saving: UseStateHandle<bool>,
     new_exercise_name: UseStateHandle<String>,
+    exercise_search: UseStateHandle<String>,
+    template_name: UseStateHandle<String>,
     on_name: Callback<Event>,
     add: Callback<MouseEvent>,
     edit_draft: Callback<usize>,
     remove_draft: Callback<usize>,
     save: Callback<MouseEvent>,
+    repeat_last: Callback<MouseEvent>,
+    save_template: Callback<MouseEvent>,
+    load_template: Callback<WorkoutTemplate>,
     logout: Callback<MouseEvent>,
     load_workout: Callback<Workout>,
     delete_selected: Callback<String>,
@@ -632,14 +709,22 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         details,
         show_new_exercise,
         draft,
+        editing_draft_index,
         workouts,
+        templates,
         status,
+        is_saving,
         new_exercise_name,
+        exercise_search,
+        template_name,
         on_name,
         add,
         edit_draft,
         remove_draft,
         save,
+        repeat_last,
+        save_template,
+        load_template,
         logout,
         load_workout,
         delete_selected,
@@ -647,6 +732,17 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         active_tab,
         ..
     } = props;
+
+    let visible_exercise_options: Vec<&String> = exercise_options
+        .iter()
+        .filter(|exercise| {
+            exercise_search.is_empty()
+                || exercise
+                    .to_ascii_lowercase()
+                    .contains(&exercise_search.to_ascii_lowercase())
+                || **name == ***exercise
+        })
+        .collect();
 
     html! {
         <main class={classes!("app-shell", format!("theme-{}", *theme))}>
@@ -748,13 +844,62 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                             }}
                         />
                     </label>
+                    {if workouts.is_empty() {
+                        html! {}
+                    } else {
+                        html! { <button class="text-button repeat-button" type="button" onclick={repeat_last}>{"Repeat last workout"}</button> }
+                    }}
+                    <div class="template-controls">
+                        <label class="field-label">
+                            {"Workout template"}
+                            <select data-testid="template-select" onchange={{
+                                let templates = templates.clone();
+                                let load_template = load_template.clone();
+                                Callback::from(move |e: Event| {
+                                    let id = e.target_unchecked_into::<HtmlSelectElement>().value();
+                                    if let Some(template) = templates.iter().find(|template| template.id == id) {
+                                        load_template.emit(template.clone());
+                                    }
+                                })
+                            }}>
+                                <option value="">{"Choose a template"}</option>
+                                {for templates.iter().map(|template| html! {
+                                    <option value={template.id.clone()}>{template.name.clone()}</option>
+                                })}
+                            </select>
+                        </label>
+                        <span class="template-save-row">
+                            <input
+                                data-testid="template-name"
+                                value={(*template_name).clone()}
+                                oninput={{
+                                    let template_name = template_name.clone();
+                                    Callback::from(move |e: InputEvent| template_name.set(input_value(e)))
+                                }}
+                                placeholder="Template name"
+                            />
+                            <button class="text-button" type="button" onclick={save_template}>{"Save template"}</button>
+                        </span>
+                    </div>
                     <div class="exercise-card">
                         <div class="exercise-stack">
                         <label class="field-label">
+                            {"Search exercises"}
+                            <input
+                                data-testid="exercise-search"
+                                value={(*exercise_search).clone()}
+                                oninput={{
+                                    let exercise_search = exercise_search.clone();
+                                    Callback::from(move |e: InputEvent| exercise_search.set(input_value(e)))
+                                }}
+                                placeholder="Search your exercises"
+                            />
+                        </label>
+                        <label class="field-label">
                             {"Exercise"}
                             <select data-testid="exercise-select" onchange={on_name}>
-                                {for exercise_options.iter().map(|exercise| html!{
-                                    <option value={exercise.clone()} selected={*name == *exercise}>{exercise.clone()}</option>
+                                {for visible_exercise_options.iter().map(|exercise| html!{
+                                    <option value={(**exercise).clone()} selected={*name == **exercise}>{(**exercise).clone()}</option>
                                 })}
                                 <option value={ADD_EXERCISE_VALUE} selected={*name == ADD_EXERCISE_VALUE}>{"New Exercise"}</option>
                             </select>
@@ -828,12 +973,14 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                                 }}
                             />
                         </label>
-                        <button class="add-button" data-testid="add-exercise-button" type="button" onclick={add}>{"+ Add Exercise"}</button>
+                        <button class="add-button" data-testid="add-exercise-button" type="button" onclick={add}>
+                            {if editing_draft_index.is_some() { "Update Exercise" } else { "+ Add Exercise" }}
+                        </button>
                         </div>
                     </div>
                     {draft_entries(&draft, edit_draft, remove_draft)}
-                    <button class="primary-button save-button" type="button" onclick={save}>
-                        {"Log Workout"}
+                    <button class="primary-button save-button" type="button" onclick={save} disabled={*is_saving} aria-busy={is_saving.to_string()}>
+                        {if *is_saving { "Saving…" } else { "Log Workout" }}
                     </button>
                 </section>
             </section>
@@ -857,9 +1004,11 @@ fn app() -> Html {
     let uid = use_state(|| stored_uid.clone());
     let refresh_token = use_state(|| stored_refresh);
     let workouts = use_state(|| cached_workouts(stored_uid.as_deref()));
+    let templates = use_state(Vec::<WorkoutTemplate>::new);
     let exercise_catalog = use_state(Vec::<String>::new);
     let exercise_aliases = use_state(HashMap::<String, String>::new);
     let status = use_state(String::new);
+    let is_saving = use_state(|| false);
     let email = use_state(String::new);
     let password = use_state(String::new);
     let signup = use_state(|| false);
@@ -877,12 +1026,16 @@ fn app() -> Html {
     let show_new_exercise = use_state(|| false);
     let draft = use_state(Vec::<Exercise>::new);
     let editing_id = use_state(|| None::<String>);
+    let editing_draft_index = use_state(|| None::<usize>);
+    let exercise_search = use_state(String::new);
+    let template_name = use_state(String::new);
 
     {
         let token = token.clone();
         let uid = uid.clone();
         let refresh_token = refresh_token.clone();
         let workouts = workouts.clone();
+        let templates = templates.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
         let theme = theme.clone();
@@ -893,6 +1046,7 @@ fn app() -> Html {
                 let uid = uid.clone();
                 let refresh_token = refresh_token.clone();
                 let workouts = workouts.clone();
+                let templates = templates.clone();
                 let exercise_catalog = exercise_catalog.clone();
                 let exercise_aliases = exercise_aliases.clone();
                 let theme = theme.clone();
@@ -943,8 +1097,9 @@ fn app() -> Html {
                         }
                     }
                     match sync_user_data(&access_token, &user_id).await {
-                        Ok((merged, catalog_names, alias_map, saved_theme)) => {
+                        Ok((merged, catalog_names, alias_map, saved_theme, saved_templates)) => {
                             workouts.set(merged);
+                            templates.set(saved_templates);
                             exercise_catalog.set(catalog_names);
                             exercise_aliases.set(alias_map);
                             theme.set(saved_theme.clone());
@@ -980,6 +1135,7 @@ fn app() -> Html {
         let note = note.clone();
         let draft = draft.clone();
         let editing_id = editing_id.clone();
+        let editing_draft_index = editing_draft_index.clone();
         let name = name.clone();
         let weight = weight.clone();
         let reps = reps.clone();
@@ -988,6 +1144,8 @@ fn app() -> Html {
         let details = details.clone();
         let new_exercise_name = new_exercise_name.clone();
         let active_tab = active_tab.clone();
+        let exercise_search = exercise_search.clone();
+        let editing_draft_index = editing_draft_index.clone();
         Callback::from(move |w: Workout| {
             date.set(w.date.clone());
             note.set(w.note.clone());
@@ -1000,6 +1158,8 @@ fn app() -> Html {
             reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
             show_new_exercise.set(false);
+            exercise_search.set(String::new());
+            editing_draft_index.set(None);
             active_tab.set("workout".into());
         })
     };
@@ -1011,6 +1171,7 @@ fn app() -> Html {
         let uid = uid.clone();
         let refresh_token = refresh_token.clone();
         let workouts = workouts.clone();
+        let templates = templates.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
         let theme = theme.clone();
@@ -1024,6 +1185,7 @@ fn app() -> Html {
             let uid = uid.clone();
             let refresh_token = refresh_token.clone();
             let workouts = workouts.clone();
+            let templates = templates.clone();
             let exercise_catalog = exercise_catalog.clone();
             let exercise_aliases = exercise_aliases.clone();
             let theme = theme.clone();
@@ -1060,14 +1222,22 @@ fn app() -> Html {
                         uid.set(Some(user_id.clone()));
                         refresh_token.set(Some(refresh.clone()));
                         let workouts = workouts.clone();
+                        let templates = templates.clone();
                         let exercise_catalog = exercise_catalog.clone();
                         let exercise_aliases = exercise_aliases.clone();
                         let theme = theme.clone();
                         let status = status.clone();
                         spawn_local(async move {
                             match sync_user_data(&access_token, &user_id).await {
-                                Ok((merged, catalog_names, alias_map, saved_theme)) => {
+                                Ok((
+                                    merged,
+                                    catalog_names,
+                                    alias_map,
+                                    saved_theme,
+                                    saved_templates,
+                                )) => {
                                     workouts.set(merged);
+                                    templates.set(saved_templates);
                                     exercise_catalog.set(catalog_names);
                                     exercise_aliases.set(alias_map);
                                     theme.set(saved_theme.clone());
@@ -1097,7 +1267,9 @@ fn app() -> Html {
         let set_reps = set_reps.clone();
         let details = details.clone();
         let show_new_exercise = show_new_exercise.clone();
+        let exercise_search = exercise_search.clone();
         let draft = draft.clone();
+        let editing_draft_index = editing_draft_index.clone();
         let status = status.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
@@ -1125,6 +1297,7 @@ fn app() -> Html {
                 let uid_state = uid_state.clone();
                 let refresh_state = refresh_state.clone();
                 let draft = draft.clone();
+                let editing_draft_index = editing_draft_index.clone();
                 let status = status.clone();
                 let exercise_catalog = exercise_catalog.clone();
                 let exercise_aliases = exercise_aliases.clone();
@@ -1168,21 +1341,23 @@ fn app() -> Html {
                             aliases.insert(canonical.to_ascii_lowercase(), canonical.clone());
                             exercise_aliases.set(aliases);
                         }
-                        let mut next = (*draft).clone();
-                        next.push(Exercise {
-                            name: canonical,
-                            weight: weight_value,
-                            reps: reps_value,
-                            details: details_value,
-                        });
-                        draft.set(next);
-                        name.set(ADD_EXERCISE_VALUE.into());
+                        save_draft_exercise(
+                            &draft,
+                            &editing_draft_index,
+                            Exercise {
+                                name: canonical,
+                                weight: weight_value,
+                                reps: reps_value,
+                                details: details_value,
+                            },
+                        );
+                        name.set(String::new());
                         new_exercise_name.set(String::new());
                         weight_state.set(String::new());
                         set_reps_state.set(default_set_reps());
                         reps_state.set(format_set_reps(&default_set_reps()));
                         details_state.set(String::new());
-                        show_new_exercise_state.set(true);
+                        show_new_exercise_state.set(false);
                         status.set(String::new());
                     } else {
                         status.set("Sign in first.".into());
@@ -1197,14 +1372,16 @@ fn app() -> Html {
             }
 
             let canonical_name = canonicalize_name(&selected, &exercise_aliases);
-            let mut next = (*draft).clone();
-            next.push(Exercise {
-                name: canonical_name,
-                weight: weight_value,
-                reps: reps_value,
-                details: details_value,
-            });
-            draft.set(next);
+            save_draft_exercise(
+                &draft,
+                &editing_draft_index,
+                Exercise {
+                    name: canonical_name,
+                    weight: weight_value,
+                    reps: reps_value,
+                    details: details_value,
+                },
+            );
             name.set(selected);
             new_exercise_name.set(String::new());
             weight.set(String::new());
@@ -1212,17 +1389,20 @@ fn app() -> Html {
             reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
             show_new_exercise.set(false);
+            exercise_search.set(String::new());
         })
     };
     let logout = {
         let token = token.clone();
         let uid = uid.clone();
         let workouts = workouts.clone();
+        let templates = templates.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
         let status = status.clone();
         let draft = draft.clone();
         let editing_id = editing_id.clone();
+        let editing_draft_index = editing_draft_index.clone();
         let name = name.clone();
         let new_exercise_name = new_exercise_name.clone();
         let weight = weight.clone();
@@ -1230,16 +1410,20 @@ fn app() -> Html {
         let set_reps = set_reps.clone();
         let details = details.clone();
         let show_new_exercise = show_new_exercise.clone();
+        let exercise_search = exercise_search.clone();
+        let template_name = template_name.clone();
         Callback::from(move |_| {
             clear_auth();
             token.set(None);
             uid.set(None);
             workouts.set(Vec::new());
+            templates.set(Vec::new());
             exercise_catalog.set(Vec::new());
             exercise_aliases.set(HashMap::new());
             status.set(String::new());
             draft.set(Vec::new());
             editing_id.set(None);
+            editing_draft_index.set(None);
             name.set(String::new());
             new_exercise_name.set(String::new());
             weight.set(String::new());
@@ -1247,15 +1431,23 @@ fn app() -> Html {
             reps.set(format_set_reps(&default_set_reps()));
             details.set(String::new());
             show_new_exercise.set(false);
+            exercise_search.set(String::new());
+            template_name.set(String::new());
         })
     };
     let remove_draft = {
         let draft = draft.clone();
+        let editing_draft_index = editing_draft_index.clone();
         Callback::from(move |index: usize| {
             let mut next = (*draft).clone();
             if index < next.len() {
                 next.remove(index);
                 draft.set(next);
+                match *editing_draft_index {
+                    Some(current) if current == index => editing_draft_index.set(None),
+                    Some(current) if current > index => editing_draft_index.set(Some(current - 1)),
+                    _ => {}
+                }
             }
         })
     };
@@ -1268,13 +1460,11 @@ fn app() -> Html {
         let details = details.clone();
         let show_new_exercise = show_new_exercise.clone();
         let status = status.clone();
+        let editing_draft_index = editing_draft_index.clone();
         Callback::from(move |index: usize| {
-            let mut next = (*draft).clone();
-            let Some(exercise) = next.get(index).cloned() else {
+            let Some(exercise) = (*draft).get(index).cloned() else {
                 return;
             };
-            next.remove(index);
-            draft.set(next);
             name.set(exercise.name);
             weight.set(
                 exercise
@@ -1287,7 +1477,8 @@ fn app() -> Html {
             reps.set(format_set_reps(&parsed));
             details.set(exercise.details);
             show_new_exercise.set(false);
-            status.set("Edit the exercise, then press Add Exercise to apply it.".into());
+            editing_draft_index.set(Some(index));
+            status.set("Update the exercise, then press Update Exercise to apply it.".into());
         })
     };
     let reset_editor: Callback<()> = {
@@ -1302,7 +1493,9 @@ fn app() -> Html {
         let show_new_exercise = show_new_exercise.clone();
         let draft = draft.clone();
         let editing_id = editing_id.clone();
+        let editing_draft_index = editing_draft_index.clone();
         let active_tab = active_tab.clone();
+        let exercise_search = exercise_search.clone();
         Callback::from(move |_: ()| {
             date.set(today_string());
             note.set(String::new());
@@ -1315,7 +1508,126 @@ fn app() -> Html {
             show_new_exercise.set(false);
             draft.set(Vec::new());
             editing_id.set(None);
+            editing_draft_index.set(None);
+            exercise_search.set(String::new());
             active_tab.set("workout".into());
+        })
+    };
+    let repeat_last = {
+        let workouts = workouts.clone();
+        let date = date.clone();
+        let note = note.clone();
+        let draft = draft.clone();
+        let editing_id = editing_id.clone();
+        let editing_draft_index = editing_draft_index.clone();
+        let name = name.clone();
+        let new_exercise_name = new_exercise_name.clone();
+        let weight = weight.clone();
+        let reps = reps.clone();
+        let set_reps = set_reps.clone();
+        let details = details.clone();
+        let show_new_exercise = show_new_exercise.clone();
+        let exercise_search = exercise_search.clone();
+        let active_tab = active_tab.clone();
+        let status = status.clone();
+        Callback::from(move |_| {
+            let Some(last) = (*workouts).first().cloned() else {
+                status.set("No previous workout to repeat yet.".into());
+                return;
+            };
+            date.set(today_string());
+            note.set(last.note);
+            draft.set(last.exercises);
+            editing_id.set(None);
+            editing_draft_index.set(None);
+            name.set(String::new());
+            new_exercise_name.set(String::new());
+            weight.set(String::new());
+            set_reps.set(default_set_reps());
+            reps.set(format_set_reps(&default_set_reps()));
+            details.set(String::new());
+            show_new_exercise.set(false);
+            exercise_search.set(String::new());
+            active_tab.set("workout".into());
+            status.set("Last workout copied. Update anything you need, then log it.".into());
+        })
+    };
+    let load_template = {
+        let date = date.clone();
+        let note = note.clone();
+        let draft = draft.clone();
+        let editing_id = editing_id.clone();
+        let editing_draft_index = editing_draft_index.clone();
+        let status = status.clone();
+        Callback::from(move |template: WorkoutTemplate| {
+            date.set(today_string());
+            note.set(template.note);
+            draft.set(template.exercises);
+            editing_id.set(None);
+            editing_draft_index.set(None);
+            status.set(format!("Loaded template: {}", template.name));
+        })
+    };
+    let save_template = {
+        let token_handle = token.clone();
+        let uid_handle = uid.clone();
+        let refresh_handle = refresh_token.clone();
+        let templates = templates.clone();
+        let template_name = template_name.clone();
+        let draft = draft.clone();
+        let note = note.clone();
+        let status = status.clone();
+        Callback::from(move |_| {
+            let name = title_case_name(template_name.trim());
+            if name.is_empty() {
+                status.set("Name the template first.".into());
+                return;
+            }
+            if draft.is_empty() {
+                status.set("Add at least one exercise before saving a template.".into());
+                return;
+            }
+            let template = WorkoutTemplate {
+                id: new_workout_id(),
+                name,
+                note: (*note).clone(),
+                exercises: (*draft).clone(),
+            };
+            let token = (*token_handle).clone();
+            let uid = (*uid_handle).clone();
+            let refresh_token = (*refresh_handle).clone();
+            let templates = templates.clone();
+            let template_name = template_name.clone();
+            let status = status.clone();
+            let token_handle = token_handle.clone();
+            let refresh_handle = refresh_handle.clone();
+            spawn_local(async move {
+                let (Some(token), Some(uid)) = (token, uid) else {
+                    status.set("Sign in first.".into());
+                    return;
+                };
+                match current_access_token(Some(token), refresh_token).await {
+                    Ok((fresh_token, next_refresh)) => {
+                        match put_workout_template(&fresh_token, &uid, &template).await {
+                            Ok(()) => {
+                                let mut next = (*templates).clone();
+                                next.push(template);
+                                next.sort_by(|a, b| a.name.cmp(&b.name));
+                                templates.set(next);
+                                template_name.set(String::new());
+                                token_handle.set(Some(fresh_token.clone()));
+                                if let Some(refresh) = next_refresh {
+                                    persist_session(&fresh_token, &uid, &refresh);
+                                    refresh_handle.set(Some(refresh));
+                                }
+                                status.set("Workout template saved.".into());
+                            }
+                            Err(error) => status.set(error),
+                        }
+                    }
+                    Err(error) => status.set(error),
+                }
+            });
         })
     };
     let save = {
@@ -1329,11 +1641,16 @@ fn app() -> Html {
         let editing_id = editing_id.clone();
         let status = status.clone();
         let reset_editor = reset_editor.clone();
+        let is_saving = is_saving.clone();
         Callback::from(move |_| {
             if draft.is_empty() {
                 status.set("Add at least one exercise.".into());
                 return;
             }
+            if *is_saving {
+                return;
+            }
+            is_saving.set(true);
             let previous_id = (*editing_id).clone();
             let w = Workout {
                 id: previous_id.as_ref().cloned().unwrap_or_else(new_workout_id),
@@ -1350,6 +1667,7 @@ fn app() -> Html {
             let refresh_state = refresh_handle.clone();
             let status = status.clone();
             let reset_editor = reset_editor.clone();
+            let is_saving = is_saving.clone();
             spawn_local(async move {
                 if let (Some(u), Some(t)) = (uid, token) {
                     match current_access_token(Some(t), refresh_token).await {
@@ -1373,13 +1691,23 @@ fn app() -> Html {
                                     }
                                     uid_state.set(Some(u.clone()));
                                     reset_editor.emit(());
-                                    status.set("Workout saved to Supabase.".into())
+                                    status.set("Workout saved to Supabase.".into());
+                                    is_saving.set(false);
                                 }
-                                Err(e) => status.set(e),
+                                Err(e) => {
+                                    status.set(e);
+                                    is_saving.set(false);
+                                }
                             }
                         }
-                        Err(e) => status.set(e),
+                        Err(e) => {
+                            status.set(e);
+                            is_saving.set(false);
+                        }
                     }
+                } else {
+                    status.set("Sign in first.".into());
+                    is_saving.set(false);
                 }
             });
         })
@@ -1391,6 +1719,16 @@ fn app() -> Html {
         let workouts = workouts.clone();
         let status = status.clone();
         Callback::from(move |id: String| {
+            let confirmed = web_sys::window()
+                .and_then(|window| {
+                    window
+                        .confirm_with_message("Delete this workout? This cannot be undone.")
+                        .ok()
+                })
+                .unwrap_or(false);
+            if !confirmed {
+                return;
+            }
             let token = (*token_handle).clone();
             let uid = (*uid_handle).clone();
             let refresh_token = (*refresh_handle).clone();
@@ -1512,14 +1850,22 @@ fn app() -> Html {
                 details,
                 show_new_exercise,
                 draft,
+                editing_draft_index,
                 workouts,
+                templates,
                 status,
+                is_saving,
                 new_exercise_name,
+                exercise_search,
+                template_name,
                 on_name,
                 add,
                 edit_draft,
                 remove_draft,
                 save,
+                repeat_last,
+                save_template,
+                load_template,
                 logout,
                 load_workout,
                 delete_selected,
