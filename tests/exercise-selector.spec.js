@@ -272,7 +272,7 @@ test("restores a saved session and server theme on refresh", async ({
   await expect(page.getByText("Workout saved to Supabase.")).toBeVisible();
   expect(workoutRequests).toContainEqual(
     expect.objectContaining({
-      workout_date: "2026-08-02",
+      workout_date: "2026-08-09",
     }),
   );
 
@@ -366,6 +366,35 @@ test("can add an existing exercise and then create a new one", async ({
       canonical_name: "Front Squat",
     }),
   );
+});
+
+test("starts a rest timer from a rep bubble and allows cancel and restart", async ({
+  page,
+}) => {
+  await mockSupabase(page, {
+    workouts: [],
+  });
+
+  await page.goto("/");
+  await openWorkoutTab(page);
+
+  const timer = page.getByTestId("rest-timer");
+  const bubble = page.getByTestId("set-rep-1");
+
+  await expect(timer).toContainText("1:30 ready");
+  await bubble.click();
+  await expect(timer).toContainText("1:30");
+  await expect(page.getByTestId("restart-rest-timer")).toHaveText("Restart");
+  await expect(page.getByTestId("cancel-rest-timer")).toBeEnabled();
+
+  await page.waitForTimeout(1200);
+  await expect(timer).toContainText("1:29");
+
+  await page.getByTestId("restart-rest-timer").click();
+  await expect(timer).toContainText("1:30");
+
+  await page.getByTestId("cancel-rest-timer").click();
+  await expect(timer).toContainText("ready");
 });
 
 test("keeps history sorted by date and edits replace the existing workout", async ({

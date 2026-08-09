@@ -1,5 +1,6 @@
 use gloo_net::http::Request;
 use gloo_storage::{LocalStorage, Storage};
+use gloo_timers::callback::Interval;
 use std::collections::{BTreeSet, HashMap};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{HtmlInputElement, HtmlSelectElement};
@@ -21,6 +22,7 @@ const AUTH_UID_KEY: &str = "lift-log-auth-uid";
 const AUTH_REFRESH_KEY: &str = "lift-log-auth-refresh";
 const THEME_KEY: &str = "lift-log-theme-v2";
 const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
+const REST_TIMER_SECONDS: u32 = 90;
 
 fn headers(
     req: gloo_net::http::RequestBuilder,
@@ -338,6 +340,11 @@ fn today_string() -> String {
         date.get_month() + 1,
         date.get_date()
     )
+}
+fn format_rest_timer(seconds: u32) -> String {
+    let minutes = seconds / 60;
+    let seconds = seconds % 60;
+    format!("{minutes}:{seconds:02}")
 }
 fn workout_cache_key(user_id: &str) -> String {
     format!("{WORKOUT_CACHE_PREFIX}-{user_id}")
@@ -657,6 +664,115 @@ fn history_view(
     }
 }
 
+#[derive(Properties, PartialEq)]
+struct RestTimerProps {
+    start_sequence: u64,
+    cancel_sequence: u64,
+    on_restart: Callback<()>,
+}
+
+#[function_component(RestTimer)]
+fn rest_timer(props: &RestTimerProps) -> Html {
+    let remaining = use_state(|| None::<u32>);
+    let seconds = use_mut_ref(|| REST_TIMER_SECONDS);
+    let interval = use_mut_ref(|| None::<Interval>);
+
+    {
+        let remaining = remaining.clone();
+        let seconds = seconds.clone();
+        let interval = interval.clone();
+        use_effect_with(props.start_sequence, move |start_sequence| {
+            if *start_sequence > 0 {
+                *seconds.borrow_mut() = REST_TIMER_SECONDS;
+                remaining.set(Some(REST_TIMER_SECONDS));
+                interval.borrow_mut().take();
+
+                let tick_remaining = remaining.clone();
+                let tick_seconds = seconds.clone();
+                let tick_interval = interval.clone();
+                let tick = Interval::new(1000, move || {
+                    let next = {
+                        let mut current = tick_seconds.borrow_mut();
+                        if *current > 1 {
+                            *current -= 1;
+                            Some(*current)
+                        } else {
+                            None
+                        }
+                    };
+                    tick_remaining.set(next);
+                    if next.is_none() {
+                        tick_interval.borrow_mut().take();
+                    }
+                });
+                *interval.borrow_mut() = Some(tick);
+            }
+            || ()
+        });
+    }
+
+    {
+        let remaining = remaining.clone();
+        let seconds = seconds.clone();
+        let interval = interval.clone();
+        use_effect_with(props.cancel_sequence, move |cancel_sequence| {
+            if *cancel_sequence > 0 {
+                *seconds.borrow_mut() = REST_TIMER_SECONDS;
+                remaining.set(None);
+                interval.borrow_mut().take();
+            }
+            || ()
+        });
+    }
+
+    let is_active = remaining.is_some();
+    html! {
+        <div class="rest-timer" data-testid="rest-timer">
+            <div>
+                <p class="rest-timer-label">{"Rest timer"}</p>
+                <p class="rest-timer-value">
+                    {if let Some(seconds) = *remaining {
+                        format_rest_timer(seconds)
+                    } else {
+                        format!("{} ready", format_rest_timer(REST_TIMER_SECONDS))
+                    }}
+                </p>
+            </div>
+            <div class="rest-timer-actions">
+                <button
+                    class="text-button"
+                    type="button"
+                    data-testid="restart-rest-timer"
+                    onclick={{
+                        let on_restart = props.on_restart.clone();
+                        Callback::from(move |_| on_restart.emit(()))
+                    }}
+                >
+                    {if is_active { "Restart" } else { "Start" }}
+                </button>
+                <button
+                    class="text-button"
+                    type="button"
+                    data-testid="cancel-rest-timer"
+                    onclick={{
+                        let remaining = remaining.clone();
+                        let seconds = seconds.clone();
+                        let interval = interval.clone();
+                        Callback::from(move |_| {
+                            *seconds.borrow_mut() = REST_TIMER_SECONDS;
+                            remaining.set(None);
+                            interval.borrow_mut().take();
+                        })
+                    }}
+                    disabled={!is_active}
+                >
+                    {"Cancel"}
+                </button>
+            </div>
+        </div>
+    }
+}
+
 struct WorkoutEditorProps {
     date: UseStateHandle<String>,
     name: UseStateHandle<String>,
@@ -672,6 +788,8 @@ struct WorkoutEditorProps {
     show_new_exercise: UseStateHandle<bool>,
     draft: UseStateHandle<Vec<Exercise>>,
     editing_draft_index: UseStateHandle<Option<usize>>,
+    rest_timer_start_sequence: UseStateHandle<u64>,
+    rest_timer_cancel_sequence: UseStateHandle<u64>,
     workouts: UseStateHandle<Vec<Workout>>,
     templates: UseStateHandle<Vec<WorkoutTemplate>>,
     status: UseStateHandle<String>,
@@ -710,6 +828,8 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         show_new_exercise,
         draft,
         editing_draft_index,
+        rest_timer_start_sequence,
+        rest_timer_cancel_sequence,
         workouts,
         templates,
         status,
@@ -743,7 +863,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                 || **name == ***exercise
         })
         .collect();
-
     html! {
         <main class={classes!("app-shell", format!("theme-{}", *theme))}>
             <header class="topbar">
@@ -942,6 +1061,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                                 {for (0..3).map(|index| {
                                     let set_reps = set_reps.clone();
                                     let reps = reps.clone();
+                                    let rest_timer_start_sequence = rest_timer_start_sequence.clone();
                                     let value = (*set_reps)[index];
                                     html! {
                                         <button
@@ -951,6 +1071,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                                             onclick={Callback::from(move |_| {
                                                 let mut next = *set_reps;
                                                 next[index] = if next[index] == 0 { 10 } else { next[index] - 1 };
+                                                rest_timer_start_sequence.set(*rest_timer_start_sequence + 1);
                                                 set_reps.set(next);
                                                 reps.set(format_set_reps(&next));
                                             })}
@@ -961,6 +1082,16 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                                 })}
                             </div>
                             <p class="subtle sets-hint">{"Tap a set to count down from 10."}</p>
+                            <RestTimer
+                                start_sequence={*rest_timer_start_sequence}
+                                cancel_sequence={*rest_timer_cancel_sequence}
+                                on_restart={{
+                                    let rest_timer_start_sequence = rest_timer_start_sequence.clone();
+                                    Callback::from(move |_| {
+                                        rest_timer_start_sequence.set(*rest_timer_start_sequence + 1)
+                                    })
+                                }}
+                            />
                         </label>
                         <label class="field-label">
                             {"Details"}
@@ -1023,12 +1154,20 @@ fn app() -> Html {
     let set_reps = use_state(default_set_reps);
     let reps = use_state(|| format_set_reps(&default_set_reps()));
     let details = use_state(String::new);
+    let rest_timer_start_sequence = use_state(|| 0_u64);
+    let rest_timer_cancel_sequence = use_state(|| 0_u64);
     let show_new_exercise = use_state(|| false);
     let draft = use_state(Vec::<Exercise>::new);
     let editing_id = use_state(|| None::<String>);
     let editing_draft_index = use_state(|| None::<usize>);
     let exercise_search = use_state(String::new);
     let template_name = use_state(String::new);
+    let clear_rest_timer = {
+        let rest_timer_cancel_sequence = rest_timer_cancel_sequence.clone();
+        Callback::from(move |_| {
+            rest_timer_cancel_sequence.set(*rest_timer_cancel_sequence + 1);
+        })
+    };
 
     {
         let token = token.clone();
@@ -1145,8 +1284,9 @@ fn app() -> Html {
         let new_exercise_name = new_exercise_name.clone();
         let active_tab = active_tab.clone();
         let exercise_search = exercise_search.clone();
-        let editing_draft_index = editing_draft_index.clone();
+        let clear_rest_timer = clear_rest_timer.clone();
         Callback::from(move |w: Workout| {
+            clear_rest_timer.emit(());
             date.set(w.date.clone());
             note.set(w.note.clone());
             draft.set(w.exercises.clone());
@@ -1412,7 +1552,9 @@ fn app() -> Html {
         let show_new_exercise = show_new_exercise.clone();
         let exercise_search = exercise_search.clone();
         let template_name = template_name.clone();
+        let clear_rest_timer = clear_rest_timer.clone();
         Callback::from(move |_| {
+            clear_rest_timer.emit(());
             clear_auth();
             token.set(None);
             uid.set(None);
@@ -1496,7 +1638,9 @@ fn app() -> Html {
         let editing_draft_index = editing_draft_index.clone();
         let active_tab = active_tab.clone();
         let exercise_search = exercise_search.clone();
+        let clear_rest_timer = clear_rest_timer.clone();
         Callback::from(move |_: ()| {
+            clear_rest_timer.emit(());
             date.set(today_string());
             note.set(String::new());
             name.set(String::new());
@@ -1530,11 +1674,13 @@ fn app() -> Html {
         let exercise_search = exercise_search.clone();
         let active_tab = active_tab.clone();
         let status = status.clone();
+        let clear_rest_timer = clear_rest_timer.clone();
         Callback::from(move |_| {
             let Some(last) = (*workouts).first().cloned() else {
                 status.set("No previous workout to repeat yet.".into());
                 return;
             };
+            clear_rest_timer.emit(());
             date.set(today_string());
             note.set(last.note);
             draft.set(last.exercises);
@@ -1558,8 +1704,10 @@ fn app() -> Html {
         let draft = draft.clone();
         let editing_id = editing_id.clone();
         let editing_draft_index = editing_draft_index.clone();
+        let clear_rest_timer = clear_rest_timer.clone();
         let status = status.clone();
         Callback::from(move |template: WorkoutTemplate| {
+            clear_rest_timer.emit(());
             date.set(today_string());
             note.set(template.note);
             draft.set(template.exercises);
@@ -1851,6 +1999,8 @@ fn app() -> Html {
                 show_new_exercise,
                 draft,
                 editing_draft_index,
+                rest_timer_start_sequence,
+                rest_timer_cancel_sequence,
                 workouts,
                 templates,
                 status,

@@ -366,6 +366,42 @@ h2 {
 .sets-hint {
   margin: -2px 0 0;
 }
+.rest-timer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--control-bg), var(--card));
+  border: 1px solid var(--line);
+}
+.rest-timer-label {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+}
+.rest-timer-value {
+  margin: 0;
+  color: var(--ink);
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+}
+.rest-timer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.rest-timer-actions .text-button {
+  white-space: nowrap;
+}
 .exercise-entries {
   display: grid;
   gap: 12px;
