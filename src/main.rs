@@ -580,7 +580,7 @@ fn auth_view(
     };
 
     html! {
-        <main class="app-shell">
+        <main class="app-shell auth">
             <div class="hero-card">
                 <p class="eyebrow">{"PERSONAL TRAINING LOG"}</p>
                 <h1>{"Lift Log"}</h1>
