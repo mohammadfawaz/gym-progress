@@ -1,6 +1,5 @@
 use gloo_net::http::Request;
 use gloo_storage::{LocalStorage, Storage};
-use gloo_timers::callback::Interval;
 use std::collections::{BTreeSet, HashMap};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{HtmlInputElement, HtmlSelectElement};
@@ -8,10 +7,7 @@ use yew::prelude::*;
 
 mod models;
 mod sets;
-use models::{
-    Auth, DbExerciseCatalog, DbUserSettings, DbWorkout, DbWorkoutTemplate, Exercise, Workout,
-    WorkoutTemplate,
-};
+use models::{Auth, DbExerciseCatalog, DbUserSettings, DbWorkout, Exercise, Workout};
 use sets::{defaults as default_set_reps, format as format_set_reps, parse as parse_set_reps};
 
 const URL: &str = "https://zhlsfzjhlnxztjklhmpi.supabase.co";
@@ -23,7 +19,6 @@ const AUTH_REFRESH_KEY: &str = "lift-log-auth-refresh";
 const THEME_KEY: &str = "lift-log-theme-v2";
 const WORKOUT_DRAFT_PREFIX: &str = "lift-log-draft-v1";
 const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
-const REST_TIMER_SECONDS: u32 = 90;
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 struct WorkoutDraft {
@@ -166,63 +161,6 @@ async fn get_workouts(token: &str, uid: &str) -> Result<Vec<Workout>, String> {
         })
         .collect())
 }
-async fn get_workout_templates(token: &str, uid: &str) -> Result<Vec<WorkoutTemplate>, String> {
-    let url = format!(
-        "{URL}/rest/v1/workout_templates?select=id,name,note,exercises&user_id=eq.{uid}&order=name.asc"
-    );
-    let res = headers(Request::get(&url), Some(token))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if !res.ok() {
-        return Err(res
-            .text()
-            .await
-            .unwrap_or_else(|_| "Could not load workout templates".into()));
-    }
-    let rows: Vec<DbWorkoutTemplate> = res.json().await.map_err(|e| e.to_string())?;
-    Ok(rows
-        .into_iter()
-        .map(|row| WorkoutTemplate {
-            id: row.id,
-            name: row.name,
-            note: row.note,
-            exercises: row.exercises,
-        })
-        .collect())
-}
-async fn put_workout_template(
-    token: &str,
-    uid: &str,
-    template: &WorkoutTemplate,
-) -> Result<(), String> {
-    let req = headers(
-        Request::post(&format!("{URL}/rest/v1/workout_templates")),
-        Some(token),
-    )
-    .header("Content-Type", "application/json");
-    let body = serde_json::json!({
-        "id": template.id,
-        "user_id": uid,
-        "name": template.name,
-        "note": template.note,
-        "exercises": template.exercises,
-    });
-    let res = req
-        .body(body.to_string())
-        .map_err(|e| e.to_string())?
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    if res.ok() {
-        Ok(())
-    } else {
-        Err(res
-            .text()
-            .await
-            .unwrap_or_else(|_| "Could not save workout template".into()))
-    }
-}
 async fn get_exercise_catalog(token: &str) -> Result<Vec<DbExerciseCatalog>, String> {
     let url = format!(
         "{URL}/rest/v1/exercise_catalog?select=canonical_name,aliases&order=sort_order.asc,canonical_name.asc"
@@ -357,11 +295,6 @@ fn today_string() -> String {
         date.get_month() + 1,
         date.get_date()
     )
-}
-fn format_rest_timer(seconds: u32) -> String {
-    let minutes = seconds / 60;
-    let seconds = seconds % 60;
-    format!("{minutes}:{seconds:02}")
 }
 fn workout_cache_key(user_id: &str) -> String {
     format!("{WORKOUT_CACHE_PREFIX}-{user_id}")
@@ -506,16 +439,7 @@ fn build_catalog(rows: &[DbExerciseCatalog]) -> (Vec<String>, HashMap<String, St
 async fn sync_user_data(
     access_token: &str,
     user_id: &str,
-) -> Result<
-    (
-        Vec<Workout>,
-        Vec<String>,
-        HashMap<String, String>,
-        String,
-        Vec<WorkoutTemplate>,
-    ),
-    String,
-> {
+) -> Result<(Vec<Workout>, Vec<String>, HashMap<String, String>, String), String> {
     let catalog_rows = get_exercise_catalog(access_token).await?;
     let (catalog_names, alias_map) = build_catalog(&catalog_rows);
     let theme = get_user_theme(access_token, user_id)
@@ -525,13 +449,9 @@ async fn sync_user_data(
     // The database is authoritative. Local storage is only an account-scoped snapshot
     // for fast rendering, never a source that writes records back during sign-in.
     let remote = merge_workouts(remote, Vec::new());
-    // Templates are an enhancement. A missing migration must not block workouts.
-    let templates = get_workout_templates(access_token, user_id)
-        .await
-        .unwrap_or_default();
     cache_workouts(user_id, &remote);
     let _ = LocalStorage::set(THEME_KEY, theme.clone());
-    Ok((remote, catalog_names, alias_map, theme, templates))
+    Ok((remote, catalog_names, alias_map, theme))
 }
 fn canonicalize_workout(w: &Workout, aliases: &HashMap<String, String>) -> Workout {
     let mut next = w.clone();
@@ -591,17 +511,23 @@ fn workout_view(
     html! {
         <article class="workout-card">
             <div class="workout-card-top">
-                <div>
+                <div class="workout-card-title">
                     <time>{w.date.clone()}</time>
                     <h3>{if w.note.is_empty(){format!("{} exercises",w.exercises.len())}else{w.note.clone()}}</h3>
                 </div>
-                <span class="pill">{format!("{} lifts",w.exercises.len())}</span>
+                <div class="workout-actions">
+                    <button class="text-button" type="button" onclick={on_edit}>{"Edit"}</button>
+                    <button class="text-button danger-button" type="button" onclick={on_delete}>{"Delete"}</button>
+                </div>
             </div>
-            <div class="workout-actions">
-                <button class="text-button" type="button" onclick={on_edit}>{"Edit"}</button>
-                <button class="text-button" type="button" onclick={on_delete}>{"Delete"}</button>
+            <div class="history-exercises">
+                { for w.exercises.iter().map(|e| html! {
+                    <div class="history-exercise">
+                        <strong>{e.name.clone()}</strong>
+                        <span>{format!("{} · {}", e.weight.map(|v| format!("{} lb", v)).unwrap_or_else(||"Bodyweight".into()), e.reps)}</span>
+                    </div>
+                }) }
             </div>
-            { for w.exercises.iter().map(|e| html! { <p class="exercise-summary">{format!("{} · {} · {}", e.name, e.weight.map(|v| format!("{} lbs", v)).unwrap_or_else(||"BW".into()), e.reps)}</p> }) }
         </article>
     }
 }
@@ -610,15 +536,23 @@ fn draft_view(
 ) -> Html {
     html! {
         <article class="exercise-entry">
+            <span class="entry-number">{format!("{:02}", i + 1)}</span>
+            <div class="entry-body">
             <div class="entry-head">
-                <h3>{format!("{}. {}", i + 1, e.name)}</h3>
+                <div>
+                    <h3>{e.name.clone()}</h3>
+                    <p>{e.details.clone()}</p>
+                </div>
                 <div class="entry-actions">
                     <button class="text-button" type="button" onclick={on_edit}>{"Edit"}</button>
                     <button class="remove-exercise" type="button" aria-label={format!("Remove {}", e.name)} onclick={on_remove}>{"×"}</button>
                 </div>
             </div>
-            <span class="pill">{e.weight.map(|v| format!("{} lbs", v)).unwrap_or_else(||"BW".into())}</span>
-            <p class="exercise-summary">{format!("{} reps{}", e.reps, if e.details.is_empty(){String::new()}else{format!(" · {}", e.details)})}</p>
+            <div class="entry-metrics">
+                <span><small>{"LOAD"}</small>{e.weight.map(|v| format!("{} lb", v)).unwrap_or_else(||"Bodyweight".into())}</span>
+                <span><small>{"REPS"}</small>{e.reps.clone()}</span>
+            </div>
+            </div>
         </article>
     }
 }
@@ -646,11 +580,16 @@ fn auth_view(
     html! {
         <main class="app-shell auth">
             <div class="hero-card">
-                <p class="eyebrow">{"PERSONAL TRAINING LOG"}</p>
+                <p class="eyebrow">{"LESS NOISE. MORE PROGRESS."}</p>
                 <h1>{"Lift Log"}</h1>
-                <p>{"Sign in to sync across devices."}</p>
+                <p>{"A focused training log for the work that actually moves you forward."}</p>
             </div>
             <form class="auth-card" onsubmit={submit_auth}>
+                <div class="auth-intro">
+                    <span class="step-label">{if *signup { "START TRAINING" } else { "WELCOME BACK" }}</span>
+                    <h2>{if *signup { "Create your account" } else { "Pick up where you left off" }}</h2>
+                    <p>{if *signup { "Your workouts will sync securely across devices." } else { "Sign in to open your training log." }}</p>
+                </div>
                 <label class="field-label">
                     {"Email"}
                     <input type="email" value={(*email).clone()} oninput={on_email} required=true />
@@ -728,118 +667,11 @@ fn history_view(
     }
 }
 
-#[derive(Properties, PartialEq)]
-struct RestTimerProps {
-    start_sequence: u64,
-    cancel_sequence: u64,
-    on_restart: Callback<()>,
-}
-
-#[function_component(RestTimer)]
-fn rest_timer(props: &RestTimerProps) -> Html {
-    let remaining = use_state(|| None::<u32>);
-    let seconds = use_mut_ref(|| REST_TIMER_SECONDS);
-    let interval = use_mut_ref(|| None::<Interval>);
-
-    {
-        let remaining = remaining.clone();
-        let seconds = seconds.clone();
-        let interval = interval.clone();
-        use_effect_with(props.start_sequence, move |start_sequence| {
-            if *start_sequence > 0 {
-                *seconds.borrow_mut() = REST_TIMER_SECONDS;
-                remaining.set(Some(REST_TIMER_SECONDS));
-                interval.borrow_mut().take();
-
-                let tick_remaining = remaining.clone();
-                let tick_seconds = seconds.clone();
-                let tick_interval = interval.clone();
-                let tick = Interval::new(1000, move || {
-                    let next = {
-                        let mut current = tick_seconds.borrow_mut();
-                        if *current > 1 {
-                            *current -= 1;
-                            Some(*current)
-                        } else {
-                            None
-                        }
-                    };
-                    tick_remaining.set(next);
-                    if next.is_none() {
-                        tick_interval.borrow_mut().take();
-                    }
-                });
-                *interval.borrow_mut() = Some(tick);
-            }
-            || ()
-        });
-    }
-
-    {
-        let remaining = remaining.clone();
-        let seconds = seconds.clone();
-        let interval = interval.clone();
-        use_effect_with(props.cancel_sequence, move |cancel_sequence| {
-            if *cancel_sequence > 0 {
-                *seconds.borrow_mut() = REST_TIMER_SECONDS;
-                remaining.set(None);
-                interval.borrow_mut().take();
-            }
-            || ()
-        });
-    }
-
-    let is_active = remaining.is_some();
-    html! {
-        <div class="rest-timer" data-testid="rest-timer">
-            <div>
-                <p class="rest-timer-label">{"Rest timer"}</p>
-                <p class="rest-timer-value">
-                    {if let Some(seconds) = *remaining {
-                        format_rest_timer(seconds)
-                    } else {
-                        format!("{} ready", format_rest_timer(REST_TIMER_SECONDS))
-                    }}
-                </p>
-            </div>
-            <div class="rest-timer-actions">
-                <button
-                    class="text-button"
-                    type="button"
-                    data-testid="restart-rest-timer"
-                    onclick={{
-                        let on_restart = props.on_restart.clone();
-                        Callback::from(move |_| on_restart.emit(()))
-                    }}
-                >
-                    {if is_active { "Restart" } else { "Start" }}
-                </button>
-                <button
-                    class="text-button"
-                    type="button"
-                    data-testid="cancel-rest-timer"
-                    onclick={{
-                        let remaining = remaining.clone();
-                        let seconds = seconds.clone();
-                        let interval = interval.clone();
-                        Callback::from(move |_| {
-                            *seconds.borrow_mut() = REST_TIMER_SECONDS;
-                            remaining.set(None);
-                            interval.borrow_mut().take();
-                        })
-                    }}
-                    disabled={!is_active}
-                >
-                    {"Cancel"}
-                </button>
-            </div>
-        </div>
-    }
-}
-
 struct WorkoutEditorProps {
     date: UseStateHandle<String>,
+    note: UseStateHandle<String>,
     name: UseStateHandle<String>,
+    editing_id: UseStateHandle<Option<String>>,
     theme: UseStateHandle<String>,
     theme_select_ref: NodeRef,
     token: UseStateHandle<Option<String>>,
@@ -852,23 +684,17 @@ struct WorkoutEditorProps {
     show_new_exercise: UseStateHandle<bool>,
     draft: UseStateHandle<Vec<Exercise>>,
     editing_draft_index: UseStateHandle<Option<usize>>,
-    rest_timer_start_sequence: UseStateHandle<u64>,
-    rest_timer_cancel_sequence: UseStateHandle<u64>,
     workouts: UseStateHandle<Vec<Workout>>,
-    templates: UseStateHandle<Vec<WorkoutTemplate>>,
     status: UseStateHandle<String>,
     is_saving: UseStateHandle<bool>,
     new_exercise_name: UseStateHandle<String>,
     exercise_search: UseStateHandle<String>,
-    template_name: UseStateHandle<String>,
     on_name: Callback<Event>,
     add: Callback<MouseEvent>,
     edit_draft: Callback<usize>,
     remove_draft: Callback<usize>,
     save: Callback<MouseEvent>,
     repeat_last: Callback<MouseEvent>,
-    save_template: Callback<MouseEvent>,
-    load_template: Callback<WorkoutTemplate>,
     logout: Callback<MouseEvent>,
     load_workout: Callback<Workout>,
     delete_selected: Callback<String>,
@@ -879,7 +705,9 @@ struct WorkoutEditorProps {
 fn workout_editor_view(props: WorkoutEditorProps) -> Html {
     let WorkoutEditorProps {
         date,
+        note,
         name,
+        editing_id,
         theme,
         theme_select_ref,
         token,
@@ -892,23 +720,17 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
         show_new_exercise,
         draft,
         editing_draft_index,
-        rest_timer_start_sequence,
-        rest_timer_cancel_sequence,
         workouts,
-        templates,
         status,
         is_saving,
         new_exercise_name,
         exercise_search,
-        template_name,
         on_name,
         add,
         edit_draft,
         remove_draft,
         save,
         repeat_last,
-        save_template,
-        load_template,
         logout,
         load_workout,
         delete_selected,
@@ -927,12 +749,21 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                 || **name == ***exercise
         })
         .collect();
+    let total_exercises: usize = workouts.iter().map(|workout| workout.exercises.len()).sum();
+    let latest_date = workouts
+        .first()
+        .map(|workout| workout.date.clone())
+        .unwrap_or_else(|| "—".into());
+    let is_editing = editing_id.is_some();
     html! {
         <main class={classes!("app-shell", format!("theme-{}", *theme))}>
             <header class="topbar">
-                <div>
-                    <p class="eyebrow">{"PERSONAL TRAINING LOG"}</p>
-                    <h1>{"Lift Log"}</h1>
+                <div class="brand-lockup">
+                    <span class="brand-mark" aria-hidden="true">{"L"}</span>
+                    <div>
+                        <p class="eyebrow">{"TRAIN WITH INTENT"}</p>
+                        <h1>{"Lift Log"}</h1>
+                    </div>
                 </div>
                 <div class="topbar-actions">
                     <label class="theme-picker">
@@ -992,7 +823,7 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
             {if !status.is_empty() {
                 html! { <p class="status" role="status">{(*status).clone()}</p> }
             } else { html! {} }}
-            <div class="tab-bar" role="tablist" aria-label="Lift Log sections">
+            <nav class="tab-bar" role="tablist" aria-label="Lift Log sections">
                 <button
                     class={classes!("tab-button", (*active_tab == "workout").then_some("active"))}
                     type="button"
@@ -1013,80 +844,68 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                 >
                     {"History"}
                 </button>
-            </div>
+            </nav>
             <section class={classes!("view", (*active_tab == "workout").then_some("active"))}>
                 <section class="workout-form">
-                    <label class="field-label">
-                        {"Date"}
-                        <input
-                            type="date"
-                            value={(*date).clone()}
-                            oninput={{
-                                let date = date.clone();
-                                Callback::from(move |e: InputEvent| date.set(input_value(e)))
+                    <section class="session-hero">
+                        <div class="session-copy">
+                            <span class="session-state">{if is_editing { "EDITING SESSION" } else if draft.is_empty() { "READY WHEN YOU ARE" } else { "WORKOUT IN PROGRESS" }}</span>
+                            <h2>{if is_editing { "Update your workout".to_string() } else if draft.is_empty() { "Build today’s session".to_string() } else { format!("{} lifts and counting", draft.len()) }}</h2>
+                            <p>{if draft.is_empty() { "Pick an exercise, log the work, and keep moving." } else { "Your progress is saved automatically on this device." }}</p>
+                        </div>
+                        <div class="session-controls">
+                            <label class="compact-field">
+                                <span>{"Training date"}</span>
+                                <input
+                                    type="date"
+                                    value={(*date).clone()}
+                                    oninput={{
+                                        let date = date.clone();
+                                        Callback::from(move |e: InputEvent| date.set(input_value(e)))
+                                    }}
+                                />
+                            </label>
+                            {if workouts.is_empty() {
+                                html! {}
+                            } else {
+                                html! { <button class="secondary-button" type="button" onclick={repeat_last}>{"Copy last workout"}</button> }
                             }}
-                        />
-                    </label>
-                    {if workouts.is_empty() {
-                        html! {}
-                    } else {
-                        html! { <button class="text-button repeat-button" type="button" onclick={repeat_last}>{"Repeat last workout"}</button> }
-                    }}
-                    <div class="template-controls">
-                        <label class="field-label">
-                            {"Workout template"}
-                            <select data-testid="template-select" onchange={{
-                                let templates = templates.clone();
-                                let load_template = load_template.clone();
-                                Callback::from(move |e: Event| {
-                                    let id = e.target_unchecked_into::<HtmlSelectElement>().value();
-                                    if let Some(template) = templates.iter().find(|template| template.id == id) {
-                                        load_template.emit(template.clone());
-                                    }
-                                })
-                            }}>
-                                <option value="">{"Choose a template"}</option>
-                                {for templates.iter().map(|template| html! {
-                                    <option value={template.id.clone()}>{template.name.clone()}</option>
-                                })}
-                            </select>
-                        </label>
-                        <span class="template-save-row">
-                            <input
-                                data-testid="template-name"
-                                value={(*template_name).clone()}
-                                oninput={{
-                                    let template_name = template_name.clone();
-                                    Callback::from(move |e: InputEvent| template_name.set(input_value(e)))
-                                }}
-                                placeholder="Template name"
-                            />
-                            <button class="text-button" type="button" onclick={save_template}>{"Save template"}</button>
-                        </span>
-                    </div>
-                    <div class="exercise-card">
+                        </div>
+                    </section>
+
+                    <div class="workout-layout">
+                    <section class="composer-card">
+                        <header class="panel-heading">
+                            <div>
+                                <span class="step-label">{"01 · ADD A LIFT"}</span>
+                                <h2>{if editing_draft_index.is_some() { "Edit exercise" } else { "Log an exercise" }}</h2>
+                            </div>
+                            <span class="panel-badge">{format!("{} in session", draft.len())}</span>
+                        </header>
                         <div class="exercise-stack">
-                        <label class="field-label">
-                            {"Search exercises"}
-                            <input
-                                data-testid="exercise-search"
-                                value={(*exercise_search).clone()}
-                                oninput={{
-                                    let exercise_search = exercise_search.clone();
-                                    Callback::from(move |e: InputEvent| exercise_search.set(input_value(e)))
-                                }}
-                                placeholder="Search your exercises"
-                            />
-                        </label>
-                        <label class="field-label">
-                            {"Exercise"}
-                            <select data-testid="exercise-select" onchange={on_name}>
-                                {for visible_exercise_options.iter().map(|exercise| html!{
-                                    <option value={(**exercise).clone()} selected={*name == **exercise}>{(**exercise).clone()}</option>
-                                })}
-                                <option value={ADD_EXERCISE_VALUE} selected={*name == ADD_EXERCISE_VALUE}>{"New Exercise"}</option>
-                            </select>
-                        </label>
+                        <div class="field-grid">
+                            <label class="field-label">
+                                {"Find an exercise"}
+                                <input
+                                    data-testid="exercise-search"
+                                    value={(*exercise_search).clone()}
+                                    oninput={{
+                                        let exercise_search = exercise_search.clone();
+                                        Callback::from(move |e: InputEvent| exercise_search.set(input_value(e)))
+                                    }}
+                                    placeholder="Search exercises"
+                                />
+                            </label>
+                            <label class="field-label">
+                                {"Exercise"}
+                                <select data-testid="exercise-select" onchange={on_name}>
+                                    {for visible_exercise_options.iter().map(|exercise| html!{
+                                        <option value={(**exercise).clone()} selected={*name == **exercise}>{(**exercise).clone()}</option>
+                                    })}
+                                    <option value={ADD_EXERCISE_VALUE} selected={*name == ADD_EXERCISE_VALUE}>{"＋ Create new exercise"}</option>
+                                </select>
+                            </label>
+                        </div>
                         {if *show_new_exercise {
                             html! {
                                 <label class="field-label">
@@ -1105,87 +924,148 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                         } else {
                             html! {}
                         }}
-                        <label class="field-label">
-                            {"Weight"}
-                            <span class="weight-row">
+                        <div class="field-grid">
+                            <label class="field-label">
+                                {"Weight"}
+                                <span class="weight-row">
+                                    <input
+                                        data-testid="weight-input"
+                                        inputmode="decimal"
+                                        placeholder="0"
+                                        value={(*weight).clone()}
+                                        oninput={{
+                                            let weight = weight.clone();
+                                            Callback::from(move |e: InputEvent| weight.set(input_value(e)))
+                                        }}
+                                    />
+                                    <span class="weight-unit">{"lb"}</span>
+                                </span>
+                            </label>
+                            <label class="field-label">
+                                {"Notes (optional)"}
                                 <input
-                                    data-testid="weight-input"
-                                    value={(*weight).clone()}
+                                    data-testid="details-input"
+                                    value={(*details).clone()}
                                     oninput={{
-                                        let weight = weight.clone();
-                                        Callback::from(move |e: InputEvent| weight.set(input_value(e)))
+                                        let details = details.clone();
+                                        Callback::from(move |e: InputEvent| details.set(input_value(e)))
                                     }}
+                                    placeholder="Tempo, RPE, cues…"
                                 />
-                                <span class="weight-unit">{"lbs"}</span>
-                            </span>
-                        </label>
-                        <label class="field-label">
-                            {"Sets"}
+                            </label>
+                        </div>
+                        <fieldset class="rep-field">
+                            <legend>{"Reps per set"}</legend>
                             <div class="sets-grid">
                                 {for (0..3).map(|index| {
-                                    let set_reps = set_reps.clone();
-                                    let reps = reps.clone();
-                                    let rest_timer_start_sequence = rest_timer_start_sequence.clone();
+                                    let decrease_set_reps = set_reps.clone();
+                                    let decrease_reps = reps.clone();
+                                    let increase_set_reps = set_reps.clone();
+                                    let increase_reps = reps.clone();
                                     let value = (*set_reps)[index];
                                     html! {
-                                        <button
-                                            class={classes!("set-chip", (value < 10).then_some("set-chip-dim"))}
-                                            type="button"
-                                            data-testid={format!("set-rep-{}", index + 1)}
-                                            onclick={Callback::from(move |_| {
-                                                let mut next = *set_reps;
-                                                next[index] = if next[index] == 0 { 10 } else { next[index] - 1 };
-                                                rest_timer_start_sequence.set(*rest_timer_start_sequence + 1);
-                                                set_reps.set(next);
-                                                reps.set(format_set_reps(&next));
-                                            })}
-                                        >
-                                            {value}
-                                        </button>
+                                        <div class="set-stepper">
+                                            <span>{format!("Set {}", index + 1)}</span>
+                                            <div class="stepper-controls">
+                                                <button
+                                                    class="rep-value"
+                                                    type="button"
+                                                    aria-label={format!("Decrease reps for set {}", index + 1)}
+                                                    data-testid={format!("set-rep-{}", index + 1)}
+                                                    onclick={Callback::from(move |_| {
+                                                        let mut next = *decrease_set_reps;
+                                                        next[index] = next[index].saturating_sub(1);
+                                                        decrease_set_reps.set(next);
+                                                        decrease_reps.set(format_set_reps(&next));
+                                                    })}
+                                                >
+                                                    {value}
+                                                </button>
+                                                <button
+                                                    class="rep-increase"
+                                                    type="button"
+                                                    aria-label={format!("Increase reps for set {}", index + 1)}
+                                                    data-testid={format!("set-rep-increase-{}", index + 1)}
+                                                    onclick={Callback::from(move |_| {
+                                                        let mut next = *increase_set_reps;
+                                                        next[index] = next[index].saturating_add(1);
+                                                        increase_set_reps.set(next);
+                                                        increase_reps.set(format_set_reps(&next));
+                                                    })}
+                                                >
+                                                    {"＋"}
+                                                </button>
+                                            </div>
+                                        </div>
                                     }
                                 })}
                             </div>
-                            <p class="subtle sets-hint">{"Tap a set to count down from 10."}</p>
-                            <RestTimer
-                                start_sequence={*rest_timer_start_sequence}
-                                cancel_sequence={*rest_timer_cancel_sequence}
-                                on_restart={{
-                                    let rest_timer_start_sequence = rest_timer_start_sequence.clone();
-                                    Callback::from(move |_| {
-                                        rest_timer_start_sequence.set(*rest_timer_start_sequence + 1)
-                                    })
-                                }}
-                            />
-                        </label>
-                        <label class="field-label">
-                            {"Details"}
-                            <input
-                                data-testid="details-input"
-                                value={(*details).clone()}
-                                oninput={{
-                                    let details = details.clone();
-                                    Callback::from(move |e: InputEvent| details.set(input_value(e)))
-                                }}
-                            />
-                        </label>
+                            <p class="sets-hint">{"Tap the number to subtract a rep, or + to add one."}</p>
+                        </fieldset>
                         <button class="add-button" data-testid="add-exercise-button" type="button" onclick={add}>
-                            {if editing_draft_index.is_some() { "Update Exercise" } else { "+ Add Exercise" }}
+                            <span>{if editing_draft_index.is_some() { "Update Exercise" } else { "Add to workout" }}</span>
+                            <span aria-hidden="true">{"→"}</span>
                         </button>
                         </div>
+                    </section>
+
+                    <aside class="plan-panel">
+                        <header class="panel-heading plan-heading">
+                            <div>
+                                <span class="step-label">{"02 · REVIEW"}</span>
+                                <h2>{"This workout"}</h2>
+                            </div>
+                            <span class="exercise-count">{draft.len()}</span>
+                        </header>
+                        <div class="draft-list">
+                            {if draft.is_empty() {
+                                html! {
+                                    <div class="plan-empty">
+                                        <span class="empty-glyph" aria-hidden="true">{"＋"}</span>
+                                        <strong>{"Your workout is empty"}</strong>
+                                        <p>{"Exercises you add will appear here for a quick review."}</p>
+                                    </div>
+                                }
+                            } else {
+                                draft_entries(&draft, edit_draft, remove_draft)
+                            }}
+                        </div>
+                        <label class="field-label workout-note">
+                            {"Session note (optional)"}
+                            <input
+                                data-testid="workout-note"
+                                value={(*note).clone()}
+                                oninput={{
+                                    let note = note.clone();
+                                    Callback::from(move |e: InputEvent| note.set(input_value(e)))
+                                }}
+                                placeholder="How did today feel?"
+                            />
+                        </label>
+                        <div class="save-dock">
+                            <span>{if draft.is_empty() { "Add a lift to continue".into() } else { format!("{} exercises ready", draft.len()) }}</span>
+                            <button class="primary-button save-button" type="button" onclick={save} disabled={*is_saving || draft.is_empty()} aria-busy={is_saving.to_string()}>
+                                {if *is_saving { "Saving…" } else if is_editing { "Save Changes" } else { "Log Workout" }}
+                            </button>
+                        </div>
+                    </aside>
                     </div>
-                    {draft_entries(&draft, edit_draft, remove_draft)}
-                    <button class="primary-button save-button" type="button" onclick={save} disabled={*is_saving} aria-busy={is_saving.to_string()}>
-                        {if *is_saving { "Saving…" } else { "Log Workout" }}
-                    </button>
                 </section>
             </section>
             <section class={classes!("view", (*active_tab == "history").then_some("active"))}>
-                <div class="section-heading">
+                <section class="history-hero">
                     <div>
-                        <p class="eyebrow">{"YOUR LOG"}</p>
-                        <h2>{"Workout history"}</h2>
+                        <span class="step-label">{"YOUR TRAINING RECORD"}</span>
+                        <h2>{"Consistency, made visible."}</h2>
+                        <p>{"Every session adds another data point to the work you’re putting in."}</p>
                     </div>
-                </div>
+                    <div class="stats-grid">
+                        <div class="stat"><span>{"Sessions"}</span><strong>{workouts.len()}</strong></div>
+                        <div class="stat"><span>{"Exercises logged"}</span><strong>{total_exercises}</strong></div>
+                        <div class="stat"><span>{"Latest session"}</span><strong class="stat-date">{latest_date}</strong></div>
+                    </div>
+                </section>
+                <div class="section-heading"><h2>{"Workout history"}</h2></div>
                 {history_view(&workouts, load_workout, delete_selected)}
             </section>
         </main>
@@ -1214,7 +1094,6 @@ fn app() -> Html {
     let uid = use_state(|| stored_uid.clone());
     let refresh_token = use_state(|| stored_refresh);
     let workouts = use_state(|| cached_workouts(stored_uid.as_deref()));
-    let templates = use_state(Vec::<WorkoutTemplate>::new);
     let exercise_catalog = use_state(Vec::<String>::new);
     let exercise_aliases = use_state(HashMap::<String, String>::new);
     let status = use_state(String::new);
@@ -1233,27 +1112,17 @@ fn app() -> Html {
     let set_reps = use_state(move || stored_set_reps);
     let reps = use_state(move || stored_reps);
     let details = use_state(move || stored_details);
-    let rest_timer_start_sequence = use_state(|| 0_u64);
-    let rest_timer_cancel_sequence = use_state(|| 0_u64);
     let show_new_exercise = use_state(move || stored_show_new_exercise);
     let draft = use_state(move || stored_exercises);
     let editing_id = use_state(move || stored_editing_id);
     let editing_draft_index = use_state(move || stored_editing_draft_index);
     let exercise_search = use_state(move || stored_exercise_search);
-    let template_name = use_state(String::new);
-    let clear_rest_timer = {
-        let rest_timer_cancel_sequence = rest_timer_cancel_sequence.clone();
-        Callback::from(move |_| {
-            rest_timer_cancel_sequence.set(*rest_timer_cancel_sequence + 1);
-        })
-    };
 
     {
         let token = token.clone();
         let uid = uid.clone();
         let refresh_token = refresh_token.clone();
         let workouts = workouts.clone();
-        let templates = templates.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
         let theme = theme.clone();
@@ -1264,7 +1133,6 @@ fn app() -> Html {
                 let uid = uid.clone();
                 let refresh_token = refresh_token.clone();
                 let workouts = workouts.clone();
-                let templates = templates.clone();
                 let exercise_catalog = exercise_catalog.clone();
                 let exercise_aliases = exercise_aliases.clone();
                 let theme = theme.clone();
@@ -1315,9 +1183,8 @@ fn app() -> Html {
                         }
                     }
                     match sync_user_data(&access_token, &user_id).await {
-                        Ok((merged, catalog_names, alias_map, saved_theme, saved_templates)) => {
+                        Ok((merged, catalog_names, alias_map, saved_theme)) => {
                             workouts.set(merged);
-                            templates.set(saved_templates);
                             exercise_catalog.set(catalog_names);
                             exercise_aliases.set(alias_map);
                             theme.set(saved_theme.clone());
@@ -1386,9 +1253,7 @@ fn app() -> Html {
         let new_exercise_name = new_exercise_name.clone();
         let active_tab = active_tab.clone();
         let exercise_search = exercise_search.clone();
-        let clear_rest_timer = clear_rest_timer.clone();
         Callback::from(move |w: Workout| {
-            clear_rest_timer.emit(());
             date.set(w.date.clone());
             note.set(w.note.clone());
             draft.set(w.exercises.clone());
@@ -1413,7 +1278,6 @@ fn app() -> Html {
         let uid = uid.clone();
         let refresh_token = refresh_token.clone();
         let workouts = workouts.clone();
-        let templates = templates.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
         let theme = theme.clone();
@@ -1427,7 +1291,6 @@ fn app() -> Html {
             let uid = uid.clone();
             let refresh_token = refresh_token.clone();
             let workouts = workouts.clone();
-            let templates = templates.clone();
             let exercise_catalog = exercise_catalog.clone();
             let exercise_aliases = exercise_aliases.clone();
             let theme = theme.clone();
@@ -1464,22 +1327,14 @@ fn app() -> Html {
                         uid.set(Some(user_id.clone()));
                         refresh_token.set(Some(refresh.clone()));
                         let workouts = workouts.clone();
-                        let templates = templates.clone();
                         let exercise_catalog = exercise_catalog.clone();
                         let exercise_aliases = exercise_aliases.clone();
                         let theme = theme.clone();
                         let status = status.clone();
                         spawn_local(async move {
                             match sync_user_data(&access_token, &user_id).await {
-                                Ok((
-                                    merged,
-                                    catalog_names,
-                                    alias_map,
-                                    saved_theme,
-                                    saved_templates,
-                                )) => {
+                                Ok((merged, catalog_names, alias_map, saved_theme)) => {
                                     workouts.set(merged);
-                                    templates.set(saved_templates);
                                     exercise_catalog.set(catalog_names);
                                     exercise_aliases.set(alias_map);
                                     theme.set(saved_theme.clone());
@@ -1638,7 +1493,6 @@ fn app() -> Html {
         let token = token.clone();
         let uid = uid.clone();
         let workouts = workouts.clone();
-        let templates = templates.clone();
         let exercise_catalog = exercise_catalog.clone();
         let exercise_aliases = exercise_aliases.clone();
         let status = status.clone();
@@ -1653,10 +1507,7 @@ fn app() -> Html {
         let details = details.clone();
         let show_new_exercise = show_new_exercise.clone();
         let exercise_search = exercise_search.clone();
-        let template_name = template_name.clone();
-        let clear_rest_timer = clear_rest_timer.clone();
         Callback::from(move |_| {
-            clear_rest_timer.emit(());
             clear_auth();
             if let Some(user_id) = (*uid).as_deref() {
                 clear_workout_draft(user_id);
@@ -1664,7 +1515,6 @@ fn app() -> Html {
             token.set(None);
             uid.set(None);
             workouts.set(Vec::new());
-            templates.set(Vec::new());
             exercise_catalog.set(Vec::new());
             exercise_aliases.set(HashMap::new());
             status.set(String::new());
@@ -1679,7 +1529,6 @@ fn app() -> Html {
             details.set(String::new());
             show_new_exercise.set(false);
             exercise_search.set(String::new());
-            template_name.set(String::new());
         })
     };
     let remove_draft = {
@@ -1743,9 +1592,7 @@ fn app() -> Html {
         let editing_draft_index = editing_draft_index.clone();
         let active_tab = active_tab.clone();
         let exercise_search = exercise_search.clone();
-        let clear_rest_timer = clear_rest_timer.clone();
         Callback::from(move |_: ()| {
-            clear_rest_timer.emit(());
             date.set(today_string());
             note.set(String::new());
             name.set(String::new());
@@ -1779,13 +1626,11 @@ fn app() -> Html {
         let exercise_search = exercise_search.clone();
         let active_tab = active_tab.clone();
         let status = status.clone();
-        let clear_rest_timer = clear_rest_timer.clone();
         Callback::from(move |_| {
             let Some(last) = (*workouts).first().cloned() else {
                 status.set("No previous workout to repeat yet.".into());
                 return;
             };
-            clear_rest_timer.emit(());
             date.set(today_string());
             note.set(last.note);
             draft.set(last.exercises);
@@ -1801,86 +1646,6 @@ fn app() -> Html {
             exercise_search.set(String::new());
             active_tab.set("workout".into());
             status.set("Last workout copied. Update anything you need, then log it.".into());
-        })
-    };
-    let load_template = {
-        let date = date.clone();
-        let note = note.clone();
-        let draft = draft.clone();
-        let editing_id = editing_id.clone();
-        let editing_draft_index = editing_draft_index.clone();
-        let clear_rest_timer = clear_rest_timer.clone();
-        let status = status.clone();
-        Callback::from(move |template: WorkoutTemplate| {
-            clear_rest_timer.emit(());
-            date.set(today_string());
-            note.set(template.note);
-            draft.set(template.exercises);
-            editing_id.set(None);
-            editing_draft_index.set(None);
-            status.set(format!("Loaded template: {}", template.name));
-        })
-    };
-    let save_template = {
-        let token_handle = token.clone();
-        let uid_handle = uid.clone();
-        let refresh_handle = refresh_token.clone();
-        let templates = templates.clone();
-        let template_name = template_name.clone();
-        let draft = draft.clone();
-        let note = note.clone();
-        let status = status.clone();
-        Callback::from(move |_| {
-            let name = title_case_name(template_name.trim());
-            if name.is_empty() {
-                status.set("Name the template first.".into());
-                return;
-            }
-            if draft.is_empty() {
-                status.set("Add at least one exercise before saving a template.".into());
-                return;
-            }
-            let template = WorkoutTemplate {
-                id: new_workout_id(),
-                name,
-                note: (*note).clone(),
-                exercises: (*draft).clone(),
-            };
-            let token = (*token_handle).clone();
-            let uid = (*uid_handle).clone();
-            let refresh_token = (*refresh_handle).clone();
-            let templates = templates.clone();
-            let template_name = template_name.clone();
-            let status = status.clone();
-            let token_handle = token_handle.clone();
-            let refresh_handle = refresh_handle.clone();
-            spawn_local(async move {
-                let (Some(token), Some(uid)) = (token, uid) else {
-                    status.set("Sign in first.".into());
-                    return;
-                };
-                match current_access_token(Some(token), refresh_token).await {
-                    Ok((fresh_token, next_refresh)) => {
-                        match put_workout_template(&fresh_token, &uid, &template).await {
-                            Ok(()) => {
-                                let mut next = (*templates).clone();
-                                next.push(template);
-                                next.sort_by(|a, b| a.name.cmp(&b.name));
-                                templates.set(next);
-                                template_name.set(String::new());
-                                token_handle.set(Some(fresh_token.clone()));
-                                if let Some(refresh) = next_refresh {
-                                    persist_session(&fresh_token, &uid, &refresh);
-                                    refresh_handle.set(Some(refresh));
-                                }
-                                status.set("Workout template saved.".into());
-                            }
-                            Err(error) => status.set(error),
-                        }
-                    }
-                    Err(error) => status.set(error),
-                }
-            });
         })
     };
     let save = {
@@ -2091,7 +1856,9 @@ fn app() -> Html {
         <>
             {workout_editor_view(WorkoutEditorProps {
                 date,
+                note,
                 name,
+                editing_id,
                 theme,
                 theme_select_ref,
                 token,
@@ -2104,23 +1871,17 @@ fn app() -> Html {
                 show_new_exercise,
                 draft,
                 editing_draft_index,
-                rest_timer_start_sequence,
-                rest_timer_cancel_sequence,
                 workouts,
-                templates,
                 status,
                 is_saving,
                 new_exercise_name,
                 exercise_search,
-                template_name,
                 on_name,
                 add,
                 edit_draft,
                 remove_draft,
                 save,
                 repeat_last,
-                save_template,
-                load_template,
                 logout,
                 load_workout,
                 delete_selected,

@@ -16,14 +16,6 @@ pub(crate) struct Workout {
     pub(crate) exercises: Vec<Exercise>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub(crate) struct WorkoutTemplate {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) note: String,
-    pub(crate) exercises: Vec<Exercise>,
-}
-
 #[derive(Deserialize)]
 pub(crate) struct Auth {
     #[serde(default)]
@@ -69,12 +61,4 @@ pub(crate) struct DbExerciseCatalog {
 #[derive(Deserialize)]
 pub(crate) struct DbUserSettings {
     pub(crate) theme: String,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct DbWorkoutTemplate {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) note: String,
-    pub(crate) exercises: Vec<Exercise>,
 }

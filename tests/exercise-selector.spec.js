@@ -32,9 +32,7 @@ async function mockSupabase(page, options = {}) {
   const workoutRequests = [];
   const deleteRequests = [];
   const themeRequests = [];
-  const templateRequests = [];
   let workouts = [...(options.workouts ?? [])];
-  let templates = [...(options.templates ?? [])];
 
   await page.route("**/auth/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -90,20 +88,6 @@ async function mockSupabase(page, options = {}) {
       }
       if (method === "POST") {
         themeRequests.push(JSON.parse(route.request().postData() || "{}"));
-        await route.fulfill(jsonResponse([], 201));
-        return;
-      }
-    }
-
-    if (pathname.endsWith("/workout_templates")) {
-      if (method === "GET") {
-        await route.fulfill(jsonResponse(templates));
-        return;
-      }
-      if (method === "POST") {
-        const template = JSON.parse(route.request().postData() || "{}");
-        templateRequests.push(template);
-        templates.push(template);
         await route.fulfill(jsonResponse([], 201));
         return;
       }
@@ -186,7 +170,6 @@ async function mockSupabase(page, options = {}) {
     workoutRequests,
     deleteRequests,
     themeRequests,
-    templateRequests,
   };
 }
 
@@ -238,7 +221,7 @@ test("loads the exercise catalog and defaults to a real exercise", async ({
     "Barbell Squats",
     "Bench Press",
     "Dumbbell Overhead Press",
-    "New Exercise",
+    "＋ Create new exercise",
   ]);
   expect(options).not.toContain("Choose an exercise");
   await expect(page.getByRole("button", { name: "History" })).toBeVisible();
@@ -402,35 +385,6 @@ test("can add an existing exercise and then create a new one", async ({
   );
 });
 
-test("starts a rest timer from a rep bubble and allows cancel and restart", async ({
-  page,
-}) => {
-  await mockSupabase(page, {
-    workouts: [],
-  });
-
-  await page.goto("/");
-  await openWorkoutTab(page);
-
-  const timer = page.getByTestId("rest-timer");
-  const bubble = page.getByTestId("set-rep-1");
-
-  await expect(timer).toContainText("1:30 ready");
-  await bubble.click();
-  await expect(timer).toContainText("1:30");
-  await expect(page.getByTestId("restart-rest-timer")).toHaveText("Restart");
-  await expect(page.getByTestId("cancel-rest-timer")).toBeEnabled();
-
-  await page.waitForTimeout(1200);
-  await expect(timer).toContainText("1:29");
-
-  await page.getByTestId("restart-rest-timer").click();
-  await expect(timer).toContainText("1:30");
-
-  await page.getByTestId("cancel-rest-timer").click();
-  await expect(timer).toContainText("ready");
-});
-
 test("keeps history sorted by date and edits replace the existing workout", async ({
   page,
 }) => {
@@ -487,7 +441,7 @@ test("keeps history sorted by date and edits replace the existing workout", asyn
   await page.getByTestId("weight-input").fill("170");
   await page.getByTestId("add-exercise-button").click();
   await expect(page.locator(".workout-form .exercise-entry")).toHaveCount(1);
-  await page.getByRole("button", { name: "Log Workout" }).click();
+  await page.getByRole("button", { name: "Save Changes" }).click();
 
   await openHistoryTab(page);
   await expect(page.locator(".workout-list .workout-card")).toHaveCount(2);
@@ -560,32 +514,14 @@ test("filters exercises and repeats the last workout as a new draft", async ({
   await page.getByTestId("exercise-search").fill("squat");
   await expect(
     page.getByTestId("exercise-select").locator("option"),
-  ).toHaveText(["Barbell Squats", "New Exercise"]);
+  ).toHaveText(["Barbell Squats", "＋ Create new exercise"]);
 
-  await page.getByRole("button", { name: "Repeat last workout" }).click();
+  await page.getByRole("button", { name: "Copy last workout" }).click();
   await expect(page.locator(".workout-form .exercise-entry")).toHaveCount(1);
   await expect(page.locator(".workout-form .exercise-entry")).toContainText(
     "Bench Press",
   );
   await expect(page.getByTestId("exercise-search")).toHaveValue("");
-});
-
-test("saves and loads a workout template", async ({ page }) => {
-  const { templateRequests } = await mockSupabase(page);
-  await page.goto("/");
-  await addExercise(page, { name: "Bench Press", weight: 185 });
-  await page.getByTestId("template-name").fill("Push Day");
-  await page.getByRole("button", { name: "Save template" }).click();
-
-  await expect(page.getByText("Workout template saved.")).toBeVisible();
-  expect(templateRequests).toHaveLength(1);
-  await expect(page.getByTestId("template-select")).toContainText("Push Day");
-
-  await page.getByTestId("template-select").selectOption({ label: "Push Day" });
-  await expect(page.getByText("Loaded template: Push Day")).toBeVisible();
-  await expect(page.locator(".workout-form .exercise-entry")).toContainText(
-    "Bench Press",
-  );
 });
 
 test("keeps the theme dropdown in sync with the server theme", async ({
