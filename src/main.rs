@@ -760,11 +760,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                 || **name == ***exercise
         })
         .collect();
-    let total_exercises: usize = workouts.iter().map(|workout| workout.exercises.len()).sum();
-    let latest_date = workouts
-        .first()
-        .map(|workout| workout.date.clone())
-        .unwrap_or_else(|| "—".into());
     let is_editing = editing_id.is_some();
     html! {
         <main class={classes!("app-shell", format!("theme-{}", *theme))}>
@@ -1064,19 +1059,13 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                 </section>
             </section>
             <section class={classes!("view", (*active_tab == "history").then_some("active"))}>
-                <section class="history-hero">
+                <div class="section-heading history-heading">
                     <div>
-                        <span class="step-label">{"YOUR TRAINING RECORD"}</span>
-                        <h2>{"Consistency, made visible."}</h2>
-                        <p>{"Every session adds another data point to the work you’re putting in."}</p>
+                        <span class="step-label">{"TRAINING LOG"}</span>
+                        <h2>{"Workout history"}</h2>
                     </div>
-                    <div class="stats-grid">
-                        <div class="stat"><span>{"Sessions"}</span><strong>{workouts.len()}</strong></div>
-                        <div class="stat"><span>{"Exercises logged"}</span><strong>{total_exercises}</strong></div>
-                        <div class="stat"><span>{"Latest session"}</span><strong class="stat-date">{latest_date}</strong></div>
-                    </div>
-                </section>
-                <div class="section-heading"><h2>{"Workout history"}</h2></div>
+                    <span class="history-count">{format!("{} sessions", workouts.len())}</span>
+                </div>
                 {history_view(&workouts, load_workout, delete_selected)}
             </section>
         </main>
