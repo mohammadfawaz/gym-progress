@@ -521,10 +521,21 @@ fn workout_view(
                 </div>
             </div>
             <div class="history-exercises">
-                { for w.exercises.iter().map(|e| html! {
+                { for w.exercises.iter().enumerate().map(|(index, e)| html! {
                     <div class="history-exercise">
-                        <strong>{e.name.clone()}</strong>
-                        <span>{format!("{} · {}", e.weight.map(|v| format!("{} lb", v)).unwrap_or_else(||"Bodyweight".into()), e.reps)}</span>
+                        <span class="history-exercise-number">{format!("{:02}", index + 1)}</span>
+                        <div class="history-exercise-copy">
+                            <strong>{e.name.clone()}</strong>
+                            {if e.details.is_empty() {
+                                html! {}
+                            } else {
+                                html! { <p>{e.details.clone()}</p> }
+                            }}
+                        </div>
+                        <div class="history-metrics">
+                            <span><small>{"Load"}</small>{e.weight.map(|v| format!("{} lb", v)).unwrap_or_else(||"Bodyweight".into())}</span>
+                            <span><small>{"Reps"}</small>{e.reps.clone()}</span>
+                        </div>
                     </div>
                 }) }
             </div>
