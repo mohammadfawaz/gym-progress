@@ -262,6 +262,7 @@ test("restores a saved session and server theme on refresh", async ({
   await expect(page.getByTestId("theme-select")).toHaveValue("pink");
 
   await openWorkoutTab(page);
+  await page.getByLabel("Date").fill("2026-08-09");
   await page.getByTestId("exercise-select").selectOption("Bench Press");
   await page.getByTestId("weight-input").fill("185");
   await page.getByTestId("set-rep-1").click();
@@ -283,6 +284,39 @@ test("restores a saved session and server theme on refresh", async ({
   await expect(page.locator(".workout-list .exercise-summary")).toContainText(
     "Bench Press",
   );
+});
+
+test("restores an in-progress workout after refresh", async ({ page }) => {
+  await mockSupabase(page);
+
+  await page.goto("/");
+  await openWorkoutTab(page);
+  await page.getByLabel("Date").fill("2026-09-17");
+  await addExercise(page, {
+    name: "Bench Press",
+    weight: 185,
+    clicks: 2,
+    details: "Paused reps",
+  });
+
+  await page.getByTestId("exercise-select").selectOption("Barbell Squats");
+  await page.getByTestId("weight-input").fill("225");
+  await page.getByTestId("details-input").fill("Working set in progress");
+  await page.getByTestId("set-rep-1").click();
+
+  await page.reload();
+
+  await expect(page.getByLabel("Date")).toHaveValue("2026-09-17");
+  await expect(page.locator(".exercise-entry")).toContainText("Bench Press");
+  await expect(page.locator(".exercise-entry")).toContainText("185 lbs");
+  await expect(page.getByTestId("exercise-select")).toHaveValue(
+    "Barbell Squats",
+  );
+  await expect(page.getByTestId("weight-input")).toHaveValue("225");
+  await expect(page.getByTestId("details-input")).toHaveValue(
+    "Working set in progress",
+  );
+  await expect(page.getByTestId("set-rep-1")).toContainText("9");
 });
 
 test("switches workout history into its own tab", async ({ page }) => {
@@ -524,10 +558,9 @@ test("filters exercises and repeats the last workout as a new draft", async ({
 
   await page.goto("/");
   await page.getByTestId("exercise-search").fill("squat");
-  await expect(page.getByTestId("exercise-select").locator("option")).toHaveText([
-    "Barbell Squats",
-    "New Exercise",
-  ]);
+  await expect(
+    page.getByTestId("exercise-select").locator("option"),
+  ).toHaveText(["Barbell Squats", "New Exercise"]);
 
   await page.getByRole("button", { name: "Repeat last workout" }).click();
   await expect(page.locator(".workout-form .exercise-entry")).toHaveCount(1);

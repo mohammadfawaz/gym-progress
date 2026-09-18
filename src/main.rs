@@ -21,8 +21,25 @@ const AUTH_TOKEN_KEY: &str = "lift-log-auth-token";
 const AUTH_UID_KEY: &str = "lift-log-auth-uid";
 const AUTH_REFRESH_KEY: &str = "lift-log-auth-refresh";
 const THEME_KEY: &str = "lift-log-theme-v2";
+const WORKOUT_DRAFT_PREFIX: &str = "lift-log-draft-v1";
 const ADD_EXERCISE_VALUE: &str = "__add_exercise__";
 const REST_TIMER_SECONDS: u32 = 90;
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+struct WorkoutDraft {
+    date: String,
+    note: String,
+    exercises: Vec<Exercise>,
+    editing_id: Option<String>,
+    editing_draft_index: Option<usize>,
+    name: String,
+    new_exercise_name: String,
+    weight: String,
+    reps: String,
+    details: String,
+    show_new_exercise: bool,
+    exercise_search: String,
+}
 
 fn headers(
     req: gloo_net::http::RequestBuilder,
@@ -348,6 +365,53 @@ fn format_rest_timer(seconds: u32) -> String {
 }
 fn workout_cache_key(user_id: &str) -> String {
     format!("{WORKOUT_CACHE_PREFIX}-{user_id}")
+}
+fn workout_draft_key(user_id: &str) -> String {
+    format!("{WORKOUT_DRAFT_PREFIX}-{user_id}")
+}
+fn empty_workout_draft() -> WorkoutDraft {
+    WorkoutDraft {
+        date: today_string(),
+        note: String::new(),
+        exercises: Vec::new(),
+        editing_id: None,
+        editing_draft_index: None,
+        name: String::new(),
+        new_exercise_name: String::new(),
+        weight: String::new(),
+        reps: format_set_reps(&default_set_reps()),
+        details: String::new(),
+        show_new_exercise: false,
+        exercise_search: String::new(),
+    }
+}
+fn cached_workout_draft(user_id: Option<&str>) -> WorkoutDraft {
+    user_id
+        .and_then(|id| LocalStorage::get::<WorkoutDraft>(workout_draft_key(id)).ok())
+        .unwrap_or_else(empty_workout_draft)
+}
+fn workout_draft_has_progress(draft: &WorkoutDraft) -> bool {
+    draft.date != today_string()
+        || !draft.note.is_empty()
+        || !draft.exercises.is_empty()
+        || draft.editing_id.is_some()
+        || draft.editing_draft_index.is_some()
+        || !draft.new_exercise_name.trim().is_empty()
+        || !draft.weight.trim().is_empty()
+        || draft.reps != format_set_reps(&default_set_reps())
+        || !draft.details.trim().is_empty()
+        || draft.show_new_exercise
+}
+fn cache_workout_draft(user_id: &str, draft: &WorkoutDraft) {
+    let key = workout_draft_key(user_id);
+    if workout_draft_has_progress(draft) {
+        let _ = LocalStorage::set(key, draft);
+    } else {
+        LocalStorage::delete(key);
+    }
+}
+fn clear_workout_draft(user_id: &str) {
+    LocalStorage::delete(workout_draft_key(user_id));
 }
 fn new_workout_id() -> String {
     web_sys::window()
@@ -1131,6 +1195,21 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
 #[function_component(App)]
 fn app() -> Html {
     let (stored_token, stored_uid, stored_refresh) = stored_auth();
+    let WorkoutDraft {
+        date: stored_date,
+        note: stored_note,
+        exercises: stored_exercises,
+        editing_id: stored_editing_id,
+        editing_draft_index: stored_editing_draft_index,
+        name: stored_name,
+        new_exercise_name: stored_new_exercise_name,
+        weight: stored_weight,
+        reps: stored_reps,
+        details: stored_details,
+        show_new_exercise: stored_show_new_exercise,
+        exercise_search: stored_exercise_search,
+    } = cached_workout_draft(stored_uid.as_deref());
+    let stored_set_reps = parse_set_reps(&stored_reps);
     let token = use_state(|| stored_token);
     let uid = use_state(|| stored_uid.clone());
     let refresh_token = use_state(|| stored_refresh);
@@ -1146,21 +1225,21 @@ fn app() -> Html {
     let active_tab = use_state(|| "workout".to_string());
     let theme = use_state(stored_theme);
     let theme_select_ref = use_node_ref();
-    let date = use_state(today_string);
-    let note = use_state(String::new);
-    let name = use_state(String::new);
-    let new_exercise_name = use_state(String::new);
-    let weight = use_state(String::new);
-    let set_reps = use_state(default_set_reps);
-    let reps = use_state(|| format_set_reps(&default_set_reps()));
-    let details = use_state(String::new);
+    let date = use_state(move || stored_date);
+    let note = use_state(move || stored_note);
+    let name = use_state(move || stored_name);
+    let new_exercise_name = use_state(move || stored_new_exercise_name);
+    let weight = use_state(move || stored_weight);
+    let set_reps = use_state(move || stored_set_reps);
+    let reps = use_state(move || stored_reps);
+    let details = use_state(move || stored_details);
     let rest_timer_start_sequence = use_state(|| 0_u64);
     let rest_timer_cancel_sequence = use_state(|| 0_u64);
-    let show_new_exercise = use_state(|| false);
-    let draft = use_state(Vec::<Exercise>::new);
-    let editing_id = use_state(|| None::<String>);
-    let editing_draft_index = use_state(|| None::<usize>);
-    let exercise_search = use_state(String::new);
+    let show_new_exercise = use_state(move || stored_show_new_exercise);
+    let draft = use_state(move || stored_exercises);
+    let editing_id = use_state(move || stored_editing_id);
+    let editing_draft_index = use_state(move || stored_editing_draft_index);
+    let exercise_search = use_state(move || stored_exercise_search);
     let template_name = use_state(String::new);
     let clear_rest_timer = {
         let rest_timer_cancel_sequence = rest_timer_cancel_sequence.clone();
@@ -1264,6 +1343,29 @@ fn app() -> Html {
         use_effect_with((*theme).clone(), move |current_theme| {
             if let Some(select) = theme_select_ref.cast::<HtmlSelectElement>() {
                 select.set_value(current_theme);
+            }
+            || ()
+        });
+    }
+    {
+        let uid = uid.clone();
+        let current_draft = WorkoutDraft {
+            date: (*date).clone(),
+            note: (*note).clone(),
+            exercises: (*draft).clone(),
+            editing_id: (*editing_id).clone(),
+            editing_draft_index: *editing_draft_index,
+            name: (*name).clone(),
+            new_exercise_name: (*new_exercise_name).clone(),
+            weight: (*weight).clone(),
+            reps: (*reps).clone(),
+            details: (*details).clone(),
+            show_new_exercise: *show_new_exercise,
+            exercise_search: (*exercise_search).clone(),
+        };
+        use_effect_with(current_draft, move |draft| {
+            if let Some(user_id) = (*uid).as_deref() {
+                cache_workout_draft(user_id, draft);
             }
             || ()
         });
@@ -1556,6 +1658,9 @@ fn app() -> Html {
         Callback::from(move |_| {
             clear_rest_timer.emit(());
             clear_auth();
+            if let Some(user_id) = (*uid).as_deref() {
+                clear_workout_draft(user_id);
+            }
             token.set(None);
             uid.set(None);
             workouts.set(Vec::new());
