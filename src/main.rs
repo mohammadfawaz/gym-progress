@@ -771,6 +771,30 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
                         <h1>{"Lift Log"}</h1>
                     </div>
                 </div>
+                <nav class="tab-bar" role="tablist" aria-label="Lift Log sections">
+                    <button
+                        class={classes!("tab-button", (*active_tab == "workout").then_some("active"))}
+                        type="button"
+                        onclick={{
+                            let active_tab = active_tab.clone();
+                            Callback::from(move |_| active_tab.set("workout".into()))
+                        }}
+                    >
+                        <span class="tab-index">{"01"}</span>
+                        <span>{"Workout"}</span>
+                    </button>
+                    <button
+                        class={classes!("tab-button", (*active_tab == "history").then_some("active"))}
+                        type="button"
+                        onclick={{
+                            let active_tab = active_tab.clone();
+                            Callback::from(move |_| active_tab.set("history".into()))
+                        }}
+                    >
+                        <span class="tab-index">{"02"}</span>
+                        <span>{"History"}</span>
+                    </button>
+                </nav>
                 <div class="topbar-actions">
                     <label class="theme-picker">
                         <span class="sr-only">{"Theme"}</span>
@@ -829,28 +853,6 @@ fn workout_editor_view(props: WorkoutEditorProps) -> Html {
             {if !status.is_empty() {
                 html! { <p class="status" role="status">{(*status).clone()}</p> }
             } else { html! {} }}
-            <nav class="tab-bar" role="tablist" aria-label="Lift Log sections">
-                <button
-                    class={classes!("tab-button", (*active_tab == "workout").then_some("active"))}
-                    type="button"
-                    onclick={{
-                        let active_tab = active_tab.clone();
-                        Callback::from(move |_| active_tab.set("workout".into()))
-                    }}
-                >
-                    {"Workout"}
-                </button>
-                <button
-                    class={classes!("tab-button", (*active_tab == "history").then_some("active"))}
-                    type="button"
-                    onclick={{
-                        let active_tab = active_tab.clone();
-                        Callback::from(move |_| active_tab.set("history".into()))
-                    }}
-                >
-                    {"History"}
-                </button>
-            </nav>
             <section class={classes!("view", (*active_tab == "workout").then_some("active"))}>
                 <section class="workout-form">
                     <section class="session-hero">
