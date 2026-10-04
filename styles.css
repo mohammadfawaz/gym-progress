@@ -25,19 +25,19 @@
 
 .theme-light {
   color-scheme: light;
-  --ink: #161b14;
-  --ink-soft: #434c3f;
-  --muted: #6e7869;
-  --paper: #eff2ea;
-  --paper-elevated: #f7f9f3;
-  --card: #fbfcf8;
+  --ink: #172015;
+  --ink-soft: #354333;
+  --muted: #586654;
+  --paper: #f1f4ed;
+  --paper-elevated: #f8faf6;
+  --card: #fdfefb;
   --card-raised: #ffffff;
-  --control-bg: #f1f4ec;
-  --line: #dce2d7;
-  --line-strong: #c6cec0;
-  --accent: #7bae17;
-  --accent-bright: #aee348;
-  --accent-soft: #e5f3cb;
+  --control-bg: #f3f6ef;
+  --line: #d2dacd;
+  --line-strong: #b7c2b1;
+  --accent: #527f08;
+  --accent-bright: #9bd52f;
+  --accent-soft: #e3efcf;
   --accent-ink: #172006;
   --danger: #ca423e;
   --danger-soft: #fbe7e4;
@@ -86,7 +86,7 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -132,6 +132,7 @@ h3 {
   min-height: 100dvh;
   margin: 0 auto;
   padding: calc(26px + env(safe-area-inset-top)) 30px 100px;
+  color: var(--ink);
   background:
     radial-gradient(
       circle at 12% 0%,
@@ -198,7 +199,7 @@ h3 {
 }
 
 .topbar h1 {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 850;
   line-height: 1;
   letter-spacing: -0.045em;
@@ -209,9 +210,9 @@ h3 {
 .session-state {
   display: block;
   color: var(--accent);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 850;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
 }
 .eyebrow {
   margin-bottom: 6px;
@@ -224,7 +225,7 @@ h3 {
   border-radius: 11px;
   background: var(--control-bg);
   color: var(--ink);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -246,7 +247,7 @@ h3 {
   border-radius: 12px;
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
   transition:
     color 0.18s ease,
@@ -291,7 +292,7 @@ h3 {
   border-radius: 13px;
   background: color-mix(in srgb, var(--accent-soft) 72%, var(--card));
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
   box-shadow: var(--shadow-sm);
 }
@@ -338,7 +339,8 @@ h3 {
 }
 .session-copy h2,
 .history-hero h2 {
-  font-size: clamp(2rem, 5vw, 4rem);
+  color: var(--ink);
+  font-size: clamp(2.25rem, 5vw, 3.75rem);
   font-weight: 900;
   line-height: 0.95;
   letter-spacing: -0.065em;
@@ -362,13 +364,13 @@ h3 {
 .field-label {
   display: grid;
   gap: 7px;
-  color: var(--muted);
-  font-size: 11px;
+  color: var(--ink-soft);
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.035em;
 }
 .compact-field span {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -436,7 +438,8 @@ h3 {
 .panel-heading h2,
 .section-heading h2 {
   margin-top: 7px;
-  font-size: 23px;
+  color: var(--ink);
+  font-size: 26px;
   font-weight: 850;
   letter-spacing: -0.04em;
 }
@@ -445,8 +448,8 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--control-bg);
-  color: var(--muted);
-  font-size: 10px;
+  color: var(--ink-soft);
+  font-size: 12px;
   font-weight: 750;
   white-space: nowrap;
 }
@@ -507,8 +510,8 @@ h3 {
 }
 .rep-field legend {
   margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 11px;
+  color: var(--ink-soft);
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.035em;
 }
@@ -526,8 +529,8 @@ h3 {
 .set-stepper > span {
   display: block;
   padding: 7px 10px 5px;
-  color: var(--muted);
-  font-size: 9px;
+  color: var(--ink-soft);
+  font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.1em;
   text-align: center;
@@ -562,8 +565,8 @@ h3 {
 }
 .sets-hint {
   margin-top: 8px;
-  color: var(--muted);
-  font-size: 11px;
+  color: var(--ink-soft);
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -623,7 +626,7 @@ h3 {
   border: 1px solid var(--line);
   background: var(--card-raised);
   color: var(--ink);
-  font-size: 12px;
+  font-size: 14px;
 }
 .secondary-button:hover {
   transform: translateY(-1px);
@@ -635,7 +638,7 @@ h3 {
   border-radius: 9px;
   background: transparent;
   color: var(--accent);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
 }
 .text-button:hover {
@@ -671,7 +674,7 @@ h3 {
   border-radius: 12px;
   background: var(--control-bg);
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 900;
 }
 .entry-body {
@@ -684,14 +687,14 @@ h3 {
   gap: 10px;
 }
 .entry-head h3 {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 820;
   letter-spacing: -0.02em;
 }
 .entry-head p {
   margin-top: 2px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 .entry-metrics {
   display: flex;
@@ -707,12 +710,12 @@ h3 {
   border-radius: 8px;
   background: var(--control-bg);
   color: var(--ink-soft);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 .entry-metrics small {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.1em;
 }
@@ -764,8 +767,8 @@ h3 {
 .save-dock > span {
   display: block;
   margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 10px;
+  color: var(--ink-soft);
+  font-size: 12px;
   font-weight: 800;
   text-align: center;
   text-transform: uppercase;
@@ -901,8 +904,8 @@ h3 {
 .history-metrics small {
   display: block;
   margin-bottom: 4px;
-  color: var(--muted);
-  font-size: 9px;
+  color: var(--ink-soft);
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
