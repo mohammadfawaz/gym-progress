@@ -1147,6 +1147,7 @@ h3 {
   .tab-bar {
     position: fixed;
     z-index: 20;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     right: 10px;
     bottom: calc(12px + env(safe-area-inset-bottom));
     left: 10px;
