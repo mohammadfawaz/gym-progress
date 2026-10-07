@@ -354,10 +354,10 @@ h3 {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 30px;
-  min-height: 200px;
-  margin-bottom: 18px;
-  padding: clamp(26px, 5vw, 48px);
+  gap: 24px;
+  min-height: 172px;
+  margin-bottom: 14px;
+  padding: clamp(22px, 4vw, 36px);
   border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
   border-radius: var(--radius-lg);
   background:
@@ -429,8 +429,8 @@ h3 {
 .field-label input,
 .field-label select {
   width: 100%;
-  min-height: 48px;
-  padding: 11px 13px;
+  min-height: 44px;
+  padding: 9px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   outline: none;
@@ -460,7 +460,7 @@ h3 {
 .workout-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
-  gap: 18px;
+  gap: 14px;
   align-items: start;
 }
 .composer-card,
@@ -471,7 +471,7 @@ h3 {
   box-shadow: var(--shadow-sm);
 }
 .composer-card {
-  padding: clamp(20px, 3vw, 30px);
+  padding: clamp(18px, 2.5vw, 24px);
 }
 .plan-panel {
   position: sticky;
@@ -484,7 +484,7 @@ h3 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 .panel-heading h2,
 .section-heading h2 {
@@ -506,7 +506,7 @@ h3 {
 }
 .plan-heading {
   margin: 0;
-  padding: 24px 24px 18px;
+  padding: 18px 20px 14px;
   border-bottom: 1px solid var(--line);
 }
 .exercise-count {
@@ -528,7 +528,7 @@ h3 {
 .field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 9px;
 }
 .weight-row {
   display: flex;
@@ -569,7 +569,7 @@ h3 {
 .sets-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 7px;
 }
 .set-stepper {
   overflow: hidden;
@@ -594,7 +594,7 @@ h3 {
 }
 .rep-value,
 .rep-increase {
-  min-height: 50px;
+  min-height: 44px;
   border: 0;
   background: transparent;
   color: var(--ink);
@@ -652,8 +652,8 @@ h3 {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: 54px;
-  padding: 14px 18px;
+  min-height: 48px;
+  padding: 11px 16px;
 }
 .primary-button:hover,
 .add-button:hover {
@@ -705,22 +705,22 @@ h3 {
 .draft-list {
   display: grid;
   gap: 1px;
-  min-height: 160px;
+  min-height: 128px;
   background: var(--line);
 }
 .exercise-entry {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 12px;
-  padding: 18px 20px;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px 16px;
   background: var(--card);
 }
 .entry-number {
   display: grid;
   place-items: center;
   align-self: start;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--control-bg);
@@ -751,7 +751,7 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 .entry-metrics > span {
   display: flex;
@@ -813,7 +813,7 @@ h3 {
   margin: 18px 20px 0;
 }
 .save-dock {
-  padding: 18px 20px 20px;
+  padding: 13px 16px 16px;
 }
 .save-dock > span {
   display: block;
@@ -858,7 +858,7 @@ h3 {
 .workout-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
+  gap: 11px;
 }
 .workout-card {
   overflow: hidden;
@@ -881,7 +881,7 @@ h3 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 22px 24px 20px;
+  padding: 17px 20px 15px;
 }
 .workout-card time {
   color: var(--accent);
@@ -904,9 +904,9 @@ h3 {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  min-height: 92px;
-  padding: 17px 20px;
+  gap: 11px;
+  min-height: 74px;
+  padding: 12px 16px;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: var(--card);
@@ -1088,7 +1088,7 @@ h3 {
   .app-shell {
     display: block;
     padding: calc(10px + env(safe-area-inset-top)) 10px
-      calc(104px + env(safe-area-inset-bottom));
+      calc(84px + env(safe-area-inset-bottom));
     background-size:
       28px 28px,
       28px 28px,
@@ -1149,11 +1149,11 @@ h3 {
     z-index: 20;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     right: 10px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    bottom: calc(8px + env(safe-area-inset-bottom));
     left: 10px;
     width: auto;
     margin: 0;
-    padding: 5px;
+    padding: 4px;
     border: 1px solid var(--line-strong);
     border-radius: 17px;
     background: color-mix(in srgb, var(--paper-elevated) 90%, transparent);
@@ -1164,7 +1164,7 @@ h3 {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 46px;
+    min-height: 42px;
     padding: 0 14px;
     color: var(--muted);
     text-align: center;
@@ -1186,10 +1186,10 @@ h3 {
   .session-hero {
     display: grid;
     min-height: 0;
-    gap: 20px;
-    margin-bottom: 12px;
-    padding: 22px 18px;
-    border-radius: 20px;
+    gap: 14px;
+    margin-bottom: 9px;
+    padding: 18px 16px;
+    border-radius: 18px;
   }
   .session-copy h2 {
     font-size: clamp(2.15rem, 11vw, 3rem);
@@ -1205,13 +1205,13 @@ h3 {
   }
   .composer-card,
   .plan-panel {
-    border-radius: 20px;
+    border-radius: 18px;
   }
   .composer-card {
-    padding: 22px 18px;
+    padding: 17px 15px;
   }
   .panel-heading {
-    margin-bottom: 20px;
+    margin-bottom: 14px;
   }
   .panel-heading h2 {
     font-size: 22px;
@@ -1220,7 +1220,7 @@ h3 {
     font-size: 12px;
   }
   .workout-layout {
-    gap: 12px;
+    gap: 9px;
   }
   .field-grid {
     grid-template-columns: 1fr;
@@ -1229,7 +1229,7 @@ h3 {
     grid-template-columns: 1fr;
   }
   .workout-card-top {
-    padding: 19px 18px 17px;
+    padding: 14px 15px 12px;
   }
   .history-exercises {
     grid-template-columns: 1fr;
@@ -1250,53 +1250,29 @@ h3 {
   .session-controls {
     grid-template-columns: 1fr;
   }
-  .sets-grid {
-    grid-template-columns: 1fr;
-  }
-  .set-stepper {
-    display: grid;
-    grid-template-columns: 60px 1fr;
-    align-items: center;
-  }
-  .set-stepper > span {
-    padding: 0 8px;
-  }
-  .stepper-controls {
-    border-left: 1px solid var(--line);
-  }
-  .rep-value {
-    min-height: 46px;
-  }
-  .workout-card-top {
-    display: grid;
-  }
-  .workout-actions {
-    justify-content: flex-start;
-    margin-left: -8px;
-  }
   .history-exercise {
-    grid-template-columns: 30px minmax(0, 1fr);
+    grid-template-columns: 26px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     min-height: 0;
-    padding: 16px;
+    padding: 11px 12px;
   }
   .history-metrics {
-    grid-column: 2;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
-    margin-top: 3px;
+    grid-column: auto;
+    grid-template-columns: repeat(2, minmax(48px, auto));
+    width: auto;
+    margin-top: 0;
   }
   .history-metrics span {
-    padding: 9px 10px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--control-bg);
-    font-size: 15px;
-    text-align: left;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 14px;
+    text-align: right;
   }
   .history-exercise strong {
-    font-size: 17px;
+    font-size: 15px;
   }
 }
 
