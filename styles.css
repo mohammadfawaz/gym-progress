@@ -354,10 +354,10 @@ h3 {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 24px;
-  min-height: 172px;
-  margin-bottom: 14px;
-  padding: clamp(22px, 4vw, 36px);
+  gap: 18px;
+  min-height: 142px;
+  margin-bottom: 10px;
+  padding: clamp(18px, 3vw, 28px);
   border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
   border-radius: var(--radius-lg);
   background:
@@ -386,12 +386,12 @@ h3 {
   max-width: 620px;
 }
 .session-state {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .session-copy h2,
 .history-hero h2 {
   color: var(--ink);
-  font-size: clamp(2.25rem, 5vw, 3.75rem);
+  font-size: clamp(2rem, 4.5vw, 3.2rem);
   font-weight: 900;
   line-height: 0.95;
   letter-spacing: -0.065em;
@@ -399,29 +399,30 @@ h3 {
 .session-copy p,
 .history-hero p {
   max-width: 560px;
-  margin-top: 14px;
+  margin-top: 8px;
+  font-size: 14px;
   color: var(--ink-soft);
-  line-height: 1.65;
+  line-height: 1.45;
 }
 .session-controls {
   position: relative;
   z-index: 1;
   display: grid;
   flex: 0 0 200px;
-  gap: 10px;
+  gap: 7px;
 }
 
 .compact-field,
 .field-label {
   display: grid;
-  gap: 7px;
+  gap: 5px;
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.035em;
 }
 .compact-field span {
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -429,14 +430,14 @@ h3 {
 .field-label input,
 .field-label select {
   width: 100%;
-  min-height: 44px;
-  padding: 9px 12px;
+  min-height: 40px;
+  padding: 7px 11px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   outline: none;
   background: var(--control-bg);
   color: var(--ink);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0;
   transition:
@@ -471,7 +472,7 @@ h3 {
   box-shadow: var(--shadow-sm);
 }
 .composer-card {
-  padding: clamp(18px, 2.5vw, 24px);
+  padding: clamp(15px, 2vw, 20px);
 }
 .plan-panel {
   position: sticky;
@@ -483,47 +484,47 @@ h3 {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 13px;
 }
 .panel-heading h2,
 .section-heading h2 {
-  margin-top: 7px;
+  margin-top: 4px;
   color: var(--ink);
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 850;
   letter-spacing: -0.04em;
 }
 .panel-badge {
-  padding: 6px 9px;
+  padding: 4px 7px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--control-bg);
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 750;
   white-space: nowrap;
 }
 .plan-heading {
   margin: 0;
-  padding: 18px 20px 14px;
+  padding: 14px 16px 11px;
   border-bottom: 1px solid var(--line);
 }
 .exercise-count {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 31px;
+  height: 31px;
   border-radius: 12px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 900;
 }
 
 .exercise-stack {
   display: grid;
-  gap: 17px;
+  gap: 11px;
 }
 .field-grid {
   display: grid;
@@ -784,20 +785,20 @@ h3 {
 .plan-empty {
   display: grid;
   place-items: center;
-  padding: 34px 20px;
+  padding: 20px 14px;
   background: var(--card);
   text-align: center;
 }
 .empty-glyph {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 7px;
   border: 1px dashed var(--line-strong);
   border-radius: 15px;
   color: var(--accent);
-  font-size: 23px;
+  font-size: 19px;
 }
 .plan-empty strong {
   font-size: 14px;
@@ -810,16 +811,16 @@ h3 {
   line-height: 1.5;
 }
 .workout-note {
-  margin: 18px 20px 0;
+  margin: 11px 14px 0;
 }
 .save-dock {
-  padding: 13px 16px 16px;
+  padding: 9px 12px 12px;
 }
 .save-dock > span {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 800;
   text-align: center;
   text-transform: uppercase;
@@ -827,8 +828,8 @@ h3 {
 }
 .save-button {
   width: 100%;
-  min-height: 52px;
-  padding: 14px 18px;
+  min-height: 44px;
+  padding: 10px 14px;
 }
 
 .section-heading {
@@ -843,27 +844,27 @@ h3 {
 }
 .history-heading {
   align-items: flex-end;
-  margin-bottom: 20px;
-  padding: 10px 2px 0;
+  margin-bottom: 12px;
+  padding: 4px 2px 0;
 }
 .history-heading h2 {
-  margin-top: 5px;
-  font-size: clamp(2rem, 4vw, 2.7rem);
+  margin-top: 2px;
+  font-size: clamp(1.65rem, 3vw, 2.2rem);
 }
 .history-count {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 750;
 }
 .workout-list {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 11px;
+  gap: 8px;
 }
 .workout-card {
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 15px;
   background: linear-gradient(145deg, var(--card-raised), var(--card));
   box-shadow: var(--shadow-sm);
   transition:
@@ -880,19 +881,19 @@ h3 {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 17px 20px 15px;
+  gap: 8px;
+  padding: 11px 14px 10px;
 }
 .workout-card time {
   color: var(--accent);
-  font-size: clamp(18px, 2.5vw, 22px);
+  font-size: clamp(15px, 2vw, 18px);
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.025em;
 }
 .workout-card h3 {
-  margin-top: 7px;
-  font-size: clamp(20px, 3vw, 25px);
+  margin-top: 3px;
+  font-size: clamp(15px, 2vw, 18px);
   letter-spacing: -0.03em;
 }
 .history-exercises {
@@ -902,11 +903,11 @@ h3 {
 }
 .history-exercise {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 11px;
-  min-height: 74px;
-  padding: 12px 16px;
+  gap: 7px;
+  min-height: 56px;
+  padding: 8px 12px;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: var(--card);
@@ -916,7 +917,7 @@ h3 {
 }
 .history-exercise-number {
   color: var(--accent);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
 }
@@ -926,37 +927,37 @@ h3 {
 .history-exercise strong {
   display: block;
   overflow: hidden;
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .history-exercise-copy p {
   overflow: hidden;
-  margin-top: 5px;
+  margin-top: 2px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .history-metrics {
   display: grid;
-  grid-template-columns: repeat(2, minmax(58px, auto));
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(48px, auto));
+  gap: 5px;
 }
 .history-metrics span {
-  min-width: 62px;
+  min-width: 50px;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 850;
   text-align: right;
 }
 .history-metrics small {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 1px;
   color: var(--ink-soft);
-  font-size: 11px;
+  font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1164,7 +1165,7 @@ h3 {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
+    min-height: 38px;
     padding: 0 14px;
     color: var(--muted);
     text-align: center;
@@ -1186,18 +1187,18 @@ h3 {
   .session-hero {
     display: grid;
     min-height: 0;
-    gap: 14px;
-    margin-bottom: 9px;
-    padding: 18px 16px;
-    border-radius: 18px;
+    gap: 10px;
+    margin-bottom: 7px;
+    padding: 14px 13px;
+    border-radius: 16px;
   }
   .session-copy h2 {
-    font-size: clamp(2.15rem, 11vw, 3rem);
+    font-size: clamp(1.8rem, 9vw, 2.4rem);
   }
   .session-copy p {
-    margin-top: 10px;
-    font-size: 15px;
-    line-height: 1.5;
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.35;
   }
   .session-controls {
     grid-template-columns: 1fr 1fr;
@@ -1205,19 +1206,19 @@ h3 {
   }
   .composer-card,
   .plan-panel {
-    border-radius: 18px;
+    border-radius: 16px;
   }
   .composer-card {
-    padding: 17px 15px;
+    padding: 13px 12px;
   }
   .panel-heading {
-    margin-bottom: 14px;
+    margin-bottom: 10px;
   }
   .panel-heading h2 {
-    font-size: 22px;
+    font-size: 19px;
   }
   .field-label {
-    font-size: 12px;
+    font-size: 11px;
   }
   .workout-layout {
     gap: 9px;
@@ -1229,7 +1230,7 @@ h3 {
     grid-template-columns: 1fr;
   }
   .workout-card-top {
-    padding: 14px 15px 12px;
+    padding: 9px 11px 8px;
   }
   .history-exercises {
     grid-template-columns: 1fr;
@@ -1255,7 +1256,7 @@ h3 {
     align-items: center;
     gap: 8px;
     min-height: 0;
-    padding: 11px 12px;
+    padding: 7px 9px;
   }
   .history-metrics {
     grid-column: auto;
@@ -1268,11 +1269,11 @@ h3 {
     padding: 0;
     border: 0;
     background: transparent;
-    font-size: 14px;
+    font-size: 11px;
     text-align: right;
   }
   .history-exercise strong {
-    font-size: 15px;
+    font-size: 12px;
   }
 }
 
